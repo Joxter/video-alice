@@ -91,6 +91,9 @@ main {
 .stage {
   position: relative;
   width: 100%;
+  /* JS sets --stage-max-w from the clip's shape so tall videos stay on screen. */
+  max-width: min(var(--stage-max-w, 100%), 100%);
+  margin: 0 auto;
   background: #0d1017;
   border-radius: var(--radius);
   overflow: hidden;
@@ -207,17 +210,17 @@ main {
 }
 
 /* Controls */
-.controls { display: flex; justify-content: center; }
-.btn.play {
-  width: 52px;
-  height: 52px;
+.controls { display: flex; justify-content: center; align-items: center; gap: 12px; }
+.btn.play,
+.btn.round {
   border-radius: 50%;
-  font-size: 18px;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+.btn.play { width: 52px; height: 52px; font-size: 18px; }
+.btn.round { width: 44px; height: 44px; font-size: 15px; }
 
 /* Toolbar */
 .toolbar {
@@ -263,4 +266,19 @@ main {
   .sizes { border-left: none; padding-left: 0; }
   .actions { justify-content: stretch; }
   .actions .btn { width: 100%; }
+}
+
+/* Drawing and trimming swallow touch events, so on narrow screens keep a strip
+   down the right-hand side free for scrolling the page. */
+@media (max-width: 760px) {
+  :root { --scroll-gutter: 68px; }
+  .stage,
+  .timeline-wrap {
+    /* width must be explicit: an auto margin cancels the flex stretch that
+       would otherwise size these, collapsing them to their content. */
+    width: 100%;
+    max-width: min(var(--stage-max-w, 100%), calc(100% - var(--scroll-gutter)));
+    margin-left: 0;
+    margin-right: auto;
+  }
 }

@@ -45,6 +45,9 @@ const timeLabel = $('timeLabel');
 const trimLabel = $('trimLabel');
 
 const playBtn = $('playBtn');
+const stopBtn = $('stopBtn');
+const backBtn = $('backBtn');
+const fwdBtn = $('fwdBtn');
 const swatchesEl = $('swatches');
 const sizesEl = $('sizes');
 const eraserBtn = $('eraserBtn');
@@ -60,6 +63,8 @@ const progressBar = $('progressBar');
 const COLORS = ['#e23b3b', '#f5a623', '#f7d038', '#3ba55d', '#2f6df6', '#8b5cf6', '#111111', '#ffffff'];
 const SNAP_SECONDS = 0.12; // draw within this of an existing keyframe -> edit it
 const MIN_TRIM = 0.2;      // keep at least this much between trim handles
+const SKIP_SECONDS = 1;    // how far the ⏪ / ⏩ buttons jump
+const MAX_STAGE_VH = 0.6;  // cap the stage height so tall clips still fit a phone screen
 
 // Codec preference order, best-looking first. Filtered per output format.
 const VIDEO_CODECS = ['avc', 'vp9', 'av1', 'vp8'];
@@ -123,6 +128,7 @@ function setupVideo() {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   stage.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+  fitStage();
 
   uploadScreen.classList.add('hidden');
   editorScreen.classList.remove('hidden');
@@ -138,6 +144,20 @@ function setupVideo() {
     requestAnimationFrame(renderLoop);
   }
 }
+
+// A portrait clip at full width is taller than the screen, which makes the page
+// awkward to scroll past. Cap the stage by width so the aspect ratio — and the
+// pointer-to-canvas mapping — stay exact. CSS narrows it further on phones to
+// keep a scrollable strip beside it.
+function fitStage() {
+  if (!video.videoWidth || !video.videoHeight) return;
+  const maxWidth = window.innerHeight * MAX_STAGE_VH * (video.videoWidth / video.videoHeight);
+  // Set on the section, not the stage, so the timeline inherits it too and the
+  // two stay the same width.
+  editorScreen.style.setProperty('--stage-max-w', `${Math.round(maxWidth)}px`);
+}
+window.addEventListener('resize', fitStage);
+window.addEventListener('orientationchange', fitStage);
 
 newBtn.addEventListener('click', resetApp);
 function resetApp() {
@@ -332,6 +352,22 @@ function togglePlay() {
     setPlayIcon(false);
   }
 }
+// Stop = back to the start of the trimmed clip, ready to play again.
+stopBtn.addEventListener('click', () => {
+  if (state.exporting) return;
+  video.pause();
+  setPlayIcon(false);
+  seek(state.trimStart);
+});
+
+backBtn.addEventListener('click', () => skip(-SKIP_SECONDS));
+fwdBtn.addEventListener('click', () => skip(SKIP_SECONDS));
+
+function skip(delta) {
+  if (state.exporting) return;
+  seek(clamp(video.currentTime + delta, state.trimStart, state.trimEnd));
+}
+
 function setPlayIcon(playing) {
   playBtn.textContent = playing ? '❚❚' : '▶';
   playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
@@ -440,6 +476,8 @@ function seek(t) {
 window.addEventListener('keydown', (e) => {
   if (editorScreen.classList.contains('hidden') || state.exporting) return;
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  if (e.code === 'ArrowLeft') { e.preventDefault(); skip(-SKIP_SECONDS); }
+  if (e.code === 'ArrowRight') { e.preventDefault(); skip(SKIP_SECONDS); }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoBtn.click(); }
 });
 
@@ -759,6 +797,7 @@ function downloadBlob(blob, filename) {
 }
 
 function setUIDisabled(disabled) {
-  [playBtn, undoBtn, clearBtn, eraserBtn, downloadBtn, newBtn].forEach((b) => (b.disabled = disabled));
+  [playBtn, stopBtn, backBtn, fwdBtn, undoBtn, clearBtn, eraserBtn, downloadBtn, newBtn]
+    .forEach((b) => (b.disabled = disabled));
   canvas.style.pointerEvents = disabled ? 'none' : '';
 }

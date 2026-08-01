@@ -26,6 +26,20 @@
 
     <!-- Editor screen -->
     <section id="editorScreen" class="editor hidden">
+      <div class="toolbar">
+        <div class="tool-group swatches" id="swatches"></div>
+        <div class="tool-group sizes" id="sizes">
+          <button class="size-btn" data-size="6">S</button>
+          <button class="size-btn active" data-size="14">M</button>
+          <button class="size-btn" data-size="28">L</button>
+        </div>
+        <div class="tool-group">
+          <button id="eraserBtn" class="btn tool">Eraser</button>
+          <button id="undoBtn" class="btn tool">Undo</button>
+          <button id="clearBtn" class="btn tool">Clear</button>
+        </div>
+      </div>
+
       <div class="stage" id="stage">
         <video id="video" playsinline></video>
         <canvas id="canvas"></canvas>
@@ -52,21 +66,10 @@
       </div>
 
       <div class="controls">
+        <button id="backBtn" class="btn round" aria-label="Back one second">⏪</button>
         <button id="playBtn" class="btn play" aria-label="Play">▶</button>
-      </div>
-
-      <div class="toolbar">
-        <div class="tool-group swatches" id="swatches"></div>
-        <div class="tool-group sizes" id="sizes">
-          <button class="size-btn" data-size="6">S</button>
-          <button class="size-btn active" data-size="14">M</button>
-          <button class="size-btn" data-size="28">L</button>
-        </div>
-        <div class="tool-group">
-          <button id="eraserBtn" class="btn tool">Eraser</button>
-          <button id="undoBtn" class="btn tool">Undo</button>
-          <button id="clearBtn" class="btn tool">Clear</button>
-        </div>
+        <button id="stopBtn" class="btn round" aria-label="Stop">■</button>
+        <button id="fwdBtn" class="btn round" aria-label="Forward one second">⏩</button>
       </div>
 
       <div class="actions">
