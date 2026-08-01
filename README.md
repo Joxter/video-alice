@@ -24,9 +24,9 @@ no server, no account, and no analytics.
 Shortcuts: <kbd>Space</kbd> to play/pause, <kbd>←</kbd> / <kbd>→</kbd> to skip a second
 (hold <kbd>Shift</kbd> for a few frames), <kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd> to undo.
 
-On phones and narrow screens the video and timeline leave a strip free down each
-side, so you can still scroll the page — drawing and trimming otherwise swallow
-every touch.
+On a touch screen, one finger on the video draws and two fingers scroll the page.
+The video and timeline also leave a strip free down each side on narrow screens,
+since drawing and trimming otherwise swallow every touch.
 
 ## Running it locally
 

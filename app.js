@@ -85,6 +85,7 @@ const state = {
   layers: [],   // { time, canvas, ctx, strokes:[{color,size,eraser,points:[{x,y}]}] }
   tool: { color: COLORS[0], size: 14, eraser: false },
   drawing: null, // { layer, stroke }
+  panning: false, // two or more fingers on the canvas: scrolling, not drawing
   exporting: false,
   loopStarted: false,
   audioTap: null, // WebAudio tap on the <video>, built once for recorder exports
@@ -258,8 +259,44 @@ function toCanvasPoint(e) {
   };
 }
 
+// One finger draws; two or more scroll the page. The browser can't split a
+// gesture by finger count — touch-action is all-or-nothing per element — so the
+// canvas keeps touch-action: none and we move the page ourselves.
+const pointers = new Map(); // pointerId -> last client position
+let panFrom = null;         // centroid of the touches when panning
+
+function centroid() {
+  let x = 0;
+  let y = 0;
+  for (const p of pointers.values()) { x += p.x; y += p.y; }
+  return { x: x / pointers.size, y: y / pointers.size };
+}
+
+// Take back the stroke the first finger already started, so a two-finger
+// scroll never leaves a stray mark behind.
+function abortStroke() {
+  if (!state.drawing) return;
+  const { layer, stroke } = state.drawing;
+  const i = layer.strokes.indexOf(stroke);
+  if (i >= 0) layer.strokes.splice(i, 1);
+  redrawLayer(layer);
+  if (!layer.strokes.length) removeLayer(layer);
+  state.drawing = null;
+}
+
 canvas.addEventListener('pointerdown', (e) => {
   if (state.exporting) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (pointers.size > 1) {
+    abortStroke();
+    state.panning = true;
+    panFrom = centroid();
+    return;
+  }
+  // A finger left over from a scroll must not start drawing.
+  if (state.panning) return;
+
   if (!video.paused) { video.pause(); setPlayIcon(false); }
   canvas.setPointerCapture(e.pointerId);
 
@@ -277,6 +314,18 @@ canvas.addEventListener('pointerdown', (e) => {
 });
 
 canvas.addEventListener('pointermove', (e) => {
+  if (pointers.has(e.pointerId)) {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  }
+
+  if (state.panning) {
+    if (!panFrom || pointers.size < 2) return;
+    const now = centroid();
+    window.scrollBy(panFrom.x - now.x, panFrom.y - now.y);
+    panFrom = centroid(); // positions are client-relative, so re-read after the scroll
+    return;
+  }
+
   if (!state.drawing) return;
   const { layer, stroke } = state.drawing;
   const pt = toCanvasPoint(e);
@@ -285,9 +334,20 @@ canvas.addEventListener('pointermove', (e) => {
   drawSegment(layer.ctx, stroke, prev, pt);
 });
 
-function endStroke() { state.drawing = null; }
-canvas.addEventListener('pointerup', endStroke);
-canvas.addEventListener('pointercancel', endStroke);
+function endPointer(e) {
+  pointers.delete(e.pointerId);
+  if (pointers.size === 0) {
+    // Only stop panning once every finger is off, so lifting one of two doesn't
+    // hand the gesture back to the brush mid-scroll.
+    state.panning = false;
+    panFrom = null;
+  } else if (state.panning) {
+    panFrom = centroid();
+  }
+  state.drawing = null;
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
 
 // ---------- Undo / Clear ----------
 undoBtn.addEventListener('click', () => {
