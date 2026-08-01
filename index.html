@@ -13,19 +13,11 @@
   </header>
 
   <main>
-    <!-- Upload screen -->
-    <section id="uploadScreen" class="upload">
-      <div id="dropZone" class="dropzone">
-        <p class="drop-title">Drop a short video here</p>
-        <p class="drop-hint">or</p>
-        <button id="pickBtn" class="btn primary">Choose a video</button>
-        <p class="drop-note">Best with clips around 10 seconds. Nothing leaves your device.</p>
-      </div>
-      <input id="fileInput" type="file" accept="video/*" hidden />
-    </section>
+    <input id="fileInput" type="file" accept="video/*" hidden />
 
-    <!-- Editor screen -->
-    <section id="editorScreen" class="editor hidden">
+    <!-- The editor is always on screen. Until a video is loaded it sits in the
+         "empty" state: the drop zone fills the stage and the tools are dimmed. -->
+    <section id="editorScreen" class="editor empty">
       <div class="toolbar">
         <div class="tool-group swatches" id="swatches"></div>
         <div class="tool-group sizes" id="sizes">
@@ -72,6 +64,13 @@
             <p id="exportLabel">Making your video…</p>
             <div class="progress"><div id="progressBar" class="progress-bar"></div></div>
           </div>
+        </div>
+
+        <div id="dropZone" class="dropzone">
+          <p class="drop-title">Drop a short video here</p>
+          <p class="drop-hint">or</p>
+          <button id="pickBtn" class="btn primary">Choose a video</button>
+          <p class="drop-note">Best with clips around 10 seconds. Nothing leaves your device.</p>
         </div>
       </div>
 

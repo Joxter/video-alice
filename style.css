@@ -94,23 +94,27 @@ main {
     cursor: not-allowed;
 }
 
-/* Upload */
-.upload {
-    display: flex;
-    justify-content: center;
-    padding-top: 32px;
-}
+/* Upload — fills the stage until a video is loaded */
 .dropzone {
-    width: 100%;
-    max-width: 520px;
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     border: 2px dashed var(--border);
     border-radius: var(--radius);
     background: var(--surface);
-    padding: 48px 24px;
+    padding: 24px;
     text-align: center;
+    line-height: 1.4;
     transition:
         border-color 0.15s,
         background 0.15s;
+}
+.editor:not(.empty) .dropzone {
+    display: none;
 }
 .dropzone.dragover {
     border-color: var(--accent);
@@ -127,8 +131,9 @@ main {
 }
 .drop-note {
     color: var(--muted);
-    font-size: 13px;
-    margin: 20px 0 0;
+    font-size: 12px;
+    margin: 16px 0 0;
+    max-width: 34ch;
 }
 
 /* Editor */
@@ -136,6 +141,27 @@ main {
     display: flex;
     flex-direction: column;
     gap: 16px;
+}
+
+/* Before a video is chosen the tools are still shown — so you can see what the
+   app does — but dimmed and inert. */
+.editor.empty .toolbar,
+.editor.empty .timeline-wrap,
+.editor.empty .controls,
+.editor.empty .actions {
+    opacity: 0.4;
+    pointer-events: none;
+    user-select: none;
+}
+.editor.empty .stage {
+    background: var(--surface);
+    box-shadow: none;
+    /* Taller than 16/9 so the invitation fits on a phone without clipping, and
+       capped so it doesn't become a vast empty box on a desktop. There's no
+       video in here yet, so constraining the height distorts nothing. */
+    aspect-ratio: 4 / 3;
+    min-height: 250px;
+    max-height: 340px;
 }
 
 .stage {
@@ -177,7 +203,7 @@ main {
 .export-overlay {
     position: absolute;
     inset: 0;
-    z-index: 3;
+    z-index: 4;
     display: flex;
     align-items: center;
     justify-content: center;

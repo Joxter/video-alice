@@ -23,7 +23,6 @@ import {
 // ---------- Element refs ----------
 const $ = (id) => document.getElementById(id);
 
-const uploadScreen = $('uploadScreen');
 const editorScreen = $('editorScreen');
 const dropZone = $('dropZone');
 const fileInput = $('fileInput');
@@ -138,9 +137,9 @@ function setupVideo() {
   canvas.height = video.videoHeight;
   stage.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
 
-  uploadScreen.classList.add('hidden');
-  editorScreen.classList.remove('hidden');
+  editorScreen.classList.remove('empty');
   newBtn.classList.remove('hidden');
+  setUIDisabled(false);
 
   video.currentTime = 0;
   renderKeyframes();
@@ -162,9 +161,9 @@ function resetApp() {
   state.layers = [];
   state.file = null;
   fileInput.value = '';
-  editorScreen.classList.add('hidden');
+  editorScreen.classList.add('empty');
   newBtn.classList.add('hidden');
-  uploadScreen.classList.remove('hidden');
+  setUIDisabled(true);
 }
 
 // ---------- Layers (doodle keyframes) ----------
@@ -504,7 +503,7 @@ function seek(t) {
 
 // ---------- Keyboard niceties ----------
 window.addEventListener('keydown', (e) => {
-  if (editorScreen.classList.contains('hidden') || state.exporting) return;
+  if (editorScreen.classList.contains('empty') || state.exporting) return;
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
   // Shift narrows the jump to a few frames, matching the single chevrons.
   if (e.code === 'ArrowLeft') { e.preventDefault(); skip(e.shiftKey ? -FRAME_STEP : -SKIP_SECONDS); }
@@ -844,3 +843,6 @@ function setUIDisabled(disabled) {
   canvas.style.pointerEvents = disabled ? 'none' : '';
   if (!disabled) updateDrawNav(); // these two depend on where the doodles are
 }
+
+// Start with the tools visible but inert, waiting for a video.
+setUIDisabled(true);
