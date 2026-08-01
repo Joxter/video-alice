@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video Alice</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Video Alice</h1>
+    <button id="newBtn" class="btn ghost hidden">New video</button>
+  </header>
+
+  <main>
+    <!-- Upload screen -->
+    <section id="uploadScreen" class="upload">
+      <div id="dropZone" class="dropzone">
+        <p class="drop-title">Drop a short video here</p>
+        <p class="drop-hint">or</p>
+        <button id="pickBtn" class="btn primary">Choose a video</button>
+        <p class="drop-note">Best with clips around 10 seconds. Nothing leaves your device.</p>
+      </div>
+      <input id="fileInput" type="file" accept="video/*" hidden />
+    </section>
+
+    <!-- Editor screen -->
+    <section id="editorScreen" class="editor hidden">
+      <div class="stage" id="stage">
+        <video id="video" playsinline></video>
+        <canvas id="canvas"></canvas>
+        <div id="exportOverlay" class="export-overlay hidden">
+          <div class="export-box">
+            <p>Making your video…</p>
+            <div class="progress"><div id="progressBar" class="progress-bar"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline-wrap">
+        <div id="timeline" class="timeline">
+          <div id="trimRegion" class="trim-region"></div>
+          <div id="keyframes" class="keyframes"></div>
+          <div id="playhead" class="playhead"></div>
+          <div id="handleStart" class="handle handle-start"></div>
+          <div id="handleEnd" class="handle handle-end"></div>
+        </div>
+        <div class="time-readout">
+          <span id="timeLabel">0:00</span>
+          <span id="trimLabel">Trim: 0:00 – 0:00</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="playBtn" class="btn play" aria-label="Play">▶</button>
+      </div>
+
+      <div class="toolbar">
+        <div class="tool-group swatches" id="swatches"></div>
+        <div class="tool-group sizes" id="sizes">
+          <button class="size-btn" data-size="6">S</button>
+          <button class="size-btn active" data-size="14">M</button>
+          <button class="size-btn" data-size="28">L</button>
+        </div>
+        <div class="tool-group">
+          <button id="eraserBtn" class="btn tool">Eraser</button>
+          <button id="undoBtn" class="btn tool">Undo</button>
+          <button id="clearBtn" class="btn tool">Clear</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="downloadBtn" class="btn primary">Download video</button>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
