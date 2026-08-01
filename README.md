@@ -60,10 +60,15 @@ finishes faster than real time. (The earlier approach recorded the preview canva
 The output codec is probed at runtime: MP4 where the browser can encode it, WebM as a
 fallback.
 
+Where WebCodecs encoding isn't available — Safari, and iPads in particular — the export
+falls back to recording the preview canvas with `MediaRecorder`, with audio routed through
+WebAudio (Safari has no `HTMLMediaElement.captureStream`). The result is the same picture;
+it just renders in real time and re-encodes from the preview rather than the source.
+
 ## Browser support
 
-Needs WebCodecs — Chrome, Edge, and recent Safari and Firefox. Chrome or Edge give the
-most reliable MP4 output.
+Chrome and Edge use the WebCodecs path and give the best quality. Safari, iPadOS, and
+older browsers use the recording fallback automatically.
 
 ## Project layout
 

@@ -75,6 +75,7 @@ const state = {
   drawing: null, // { layer, stroke }
   exporting: false,
   loopStarted: false,
+  audioTap: null, // WebAudio tap on the <video>, built once for recorder exports
 };
 
 // ---------- Helpers ----------
@@ -442,9 +443,17 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---------- Export ----------
-// mediabunny decodes the original file with WebCodecs, so the export is
-// frame-accurate and runs faster than real time. We redraw each decoded frame
-// plus its doodle layer onto an offscreen canvas and encode that.
+// Preferred path: mediabunny decodes the original file with WebCodecs, so the
+// export is frame-accurate and runs faster than real time. We redraw each
+// decoded frame plus its doodle layer onto an offscreen canvas and encode that.
+//
+// Safari — especially on iPad — either lacks WebCodecs encoding or refuses every
+// codec we can mux. There we fall back to recording the preview canvas in real
+// time with MediaRecorder, which Safari has supported for years. Same picture,
+// just slower and re-encoded from the preview rather than the source.
+
+const HAS_WEBCODECS =
+  typeof window.VideoEncoder === 'function' && typeof window.VideoDecoder === 'function';
 
 // Pick the best format/codec combo this browser can actually encode.
 async function pickEncoding(width, height, audioTrack) {
@@ -485,7 +494,17 @@ async function exportVideo() {
   setPlayIcon(false);
 
   try {
-    await runExport();
+    if (HAS_WEBCODECS) {
+      try {
+        await exportWithWebCodecs();
+      } catch (err) {
+        if (!(err instanceof UnsupportedHereError)) throw err;
+        console.warn('WebCodecs export unavailable, recording instead:', err.message);
+        await exportWithRecorder();
+      }
+    } else {
+      await exportWithRecorder();
+    }
   } catch (err) {
     console.error(err);
     alert('Sorry, making the video didn’t work.\n\n' + (err && err.message ? err.message : err));
@@ -496,7 +515,11 @@ async function exportVideo() {
   }
 }
 
-async function runExport() {
+// Thrown when this browser can't do the WebCodecs path — the signal to fall back
+// rather than show an error.
+class UnsupportedHereError extends Error {}
+
+async function exportWithWebCodecs() {
   const trimStart = state.trimStart;
   const trimEnd = state.trimEnd;
   const span = Math.max(0.001, trimEnd - trimStart);
@@ -511,7 +534,7 @@ async function runExport() {
   const height = Math.max(2, Math.floor(canvas.height / 2) * 2);
 
   const encoding = await pickEncoding(width, height, audioTrack);
-  if (!encoding) throw new Error('Your browser can’t encode video. Try Chrome or Edge.');
+  if (!encoding) throw new UnsupportedHereError('no encodable video codec');
   const { format, videoCodec, audioCodec } = encoding;
 
   // Offscreen stage: same compositing as the preview, at export resolution.
@@ -569,6 +592,112 @@ async function runExport() {
   progressBar.style.width = '100%';
   const blob = new Blob([target.buffer], { type: format.mimeType });
   downloadBlob(blob, `video-alice.${format.fileExtension.replace(/^\./, '')}`);
+}
+
+// ---------- Fallback export (Safari / iPad) ----------
+function pickRecorderMimeType() {
+  const candidates = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4',
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+  ];
+  for (const c of candidates) {
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) return c;
+  }
+  return '';
+}
+
+// Safari has no HTMLMediaElement.captureStream, so route the audio through
+// WebAudio instead. createMediaElementSource can only be called once per
+// element, hence the caching.
+function recorderAudioTracks() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return [];
+  try {
+    if (!state.audioTap) {
+      const ctx = new AudioCtx();
+      const source = ctx.createMediaElementSource(video);
+      const dest = ctx.createMediaStreamDestination();
+      source.connect(dest);
+      source.connect(ctx.destination); // keep it audible while recording
+      state.audioTap = { ctx, dest };
+    }
+    state.audioTap.ctx.resume();
+    return state.audioTap.dest.stream.getAudioTracks();
+  } catch (err) {
+    console.warn('No audio in export:', err);
+    return [];
+  }
+}
+
+async function exportWithRecorder() {
+  if (typeof MediaRecorder === 'undefined' || !canvas.captureStream) {
+    throw new Error('This browser can’t make video files. Try Chrome, Edge, or a newer Safari.');
+  }
+
+  const trimStart = state.trimStart;
+  const trimEnd = state.trimEnd;
+  const span = Math.max(0.001, trimEnd - trimStart);
+
+  await seekAndWait(trimStart);
+
+  const stream = canvas.captureStream(30);
+  for (const track of recorderAudioTracks()) stream.addTrack(track);
+
+  const mime = pickRecorderMimeType();
+  const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+
+  const blob = await new Promise((resolve, reject) => {
+    let settled = false;
+
+    // Recording ends at whichever comes first: reaching the trim end, the clip
+    // ending, or a safety timeout. The old version watched only `paused`, which
+    // the `ended` event could beat — that's what made it hang forever.
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearInterval(ticker);
+      clearTimeout(safety);
+      video.removeEventListener('ended', finish);
+      video.pause();
+      setPlayIcon(false);
+      if (rec.state !== 'inactive') rec.stop();
+    };
+
+    const tick = () => {
+      const p = clamp((video.currentTime - trimStart) / span, 0, 1);
+      progressBar.style.width = `${p * 100}%`;
+      if (video.currentTime >= trimEnd - 0.02) finish();
+    };
+
+    const ticker = setInterval(tick, 100);
+    const safety = setTimeout(finish, span * 1000 + 5000);
+    video.addEventListener('ended', finish);
+
+    rec.onstop = () => resolve(new Blob(chunks, { type: mime || 'video/webm' }));
+    rec.onerror = (e) => { finish(); reject(e.error || new Error('Recording failed.')); };
+
+    rec.start();
+    video.play().then(() => setPlayIcon(true), (err) => { finish(); reject(err); });
+  });
+
+  progressBar.style.width = '100%';
+  const ext = (mime || '').includes('mp4') ? 'mp4' : 'webm';
+  downloadBlob(blob, `video-alice.${ext}`);
+  seek(trimStart);
+}
+
+function seekAndWait(t) {
+  return new Promise((resolve) => {
+    if (Math.abs(video.currentTime - t) < 1e-3) return resolve();
+    const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve(); };
+    video.addEventListener('seeked', onSeeked);
+    video.currentTime = t;
+  });
 }
 
 function downloadBlob(blob, filename) {
