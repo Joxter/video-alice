@@ -140,9 +140,9 @@ main {
 
 .stage {
     position: relative;
+    /* Sized from the page width only. Keying off the viewport height instead
+       made the video jump every time a mobile browser's chrome slid away. */
     width: 100%;
-    /* JS sets --stage-max-w from the clip's shape so tall videos stay on screen. */
-    max-width: min(var(--stage-max-w, 100%), 100%);
     margin: 0 auto;
     background: #0d1017;
     border-radius: var(--radius);
@@ -406,15 +406,37 @@ main {
     font: inherit;
     width: 34px;
     height: 34px;
+    padding: 0;
     border-radius: 8px;
     border: 1px solid var(--border);
     background: var(--surface);
+    color: var(--text);
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* A dot the size of the brush, rather than a letter to decode. */
+.size-dot {
+    display: block;
+    border-radius: 50%;
+    background: currentColor;
+}
+.size-btn[data-size="6"] .size-dot {
+    width: 6px;
+    height: 6px;
+}
+.size-btn[data-size="14"] .size-dot {
+    width: 13px;
+    height: 13px;
+}
+.size-btn[data-size="28"] .size-dot {
+    width: 22px;
+    height: 22px;
 }
 .size-btn.active {
     border-color: var(--accent);
     color: var(--accent);
-    font-weight: 600;
 }
 .btn.tool {
     padding: 8px 12px;
@@ -465,10 +487,7 @@ main {
         /* width must be explicit: an auto margin cancels the flex stretch that
        would otherwise size this, collapsing it to its content. */
         width: 100%;
-        max-width: min(
-            var(--stage-max-w, 100%),
-            calc(100% - var(--scroll-gutter) * 2)
-        );
+        max-width: calc(100% - var(--scroll-gutter) * 2);
         margin-left: auto;
         margin-right: auto;
     }

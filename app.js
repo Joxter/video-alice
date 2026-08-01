@@ -63,13 +63,15 @@ const exportLabel = $('exportLabel');
 const progressBar = $('progressBar');
 
 // ---------- Constants ----------
-const COLORS = ['#e23b3b', '#f5a623', '#f7d038', '#3ba55d', '#2f6df6', '#8b5cf6', '#111111', '#ffffff'];
+const COLORS = [
+  '#e23b3b', '#f5a623', '#f7d038', '#3ba55d', '#2f6df6', '#8b5cf6',
+  '#8b5e34', '#9aa1ab', '#111111', '#ffffff',
+];
 const SNAP_SECONDS = 0.12; // draw within this of an existing keyframe -> edit it
 const MIN_TRIM = 0.2;      // keep at least this much between trim handles
 const SKIP_SECONDS = 1;    // the double-chevron jump
 const FRAME_SECONDS = 1 / 30; // no reliable frame rate in the DOM, so assume 30fps
 const SKIP_FRAMES = 3;     // the single-chevron nudge, for landing on a moment
-const MAX_STAGE_VH = 0.6;  // cap the stage height so tall clips still fit a phone screen
 
 // Codec preference order, best-looking first. Filtered per output format.
 const VIDEO_CODECS = ['avc', 'vp9', 'av1', 'vp8'];
@@ -135,7 +137,6 @@ function setupVideo() {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   stage.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
-  fitStage();
 
   uploadScreen.classList.add('hidden');
   editorScreen.classList.remove('hidden');
@@ -151,20 +152,6 @@ function setupVideo() {
     requestAnimationFrame(renderLoop);
   }
 }
-
-// A portrait clip at full width is taller than the screen, which makes the page
-// awkward to scroll past. Cap the stage by width so the aspect ratio — and the
-// pointer-to-canvas mapping — stay exact. CSS narrows it further on phones to
-// keep a scrollable strip beside it.
-function fitStage() {
-  if (!video.videoWidth || !video.videoHeight) return;
-  const maxWidth = window.innerHeight * MAX_STAGE_VH * (video.videoWidth / video.videoHeight);
-  // Set on the section, not the stage, so the timeline inherits it too and the
-  // two stay the same width.
-  editorScreen.style.setProperty('--stage-max-w', `${Math.round(maxWidth)}px`);
-}
-window.addEventListener('resize', fitStage);
-window.addEventListener('orientationchange', fitStage);
 
 newBtn.addEventListener('click', resetApp);
 function resetApp() {

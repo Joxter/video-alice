@@ -29,9 +29,15 @@
       <div class="toolbar">
         <div class="tool-group swatches" id="swatches"></div>
         <div class="tool-group sizes" id="sizes">
-          <button class="size-btn" data-size="6">S</button>
-          <button class="size-btn active" data-size="14">M</button>
-          <button class="size-btn" data-size="28">L</button>
+          <button class="size-btn" data-size="6" title="Thin" aria-label="Thin brush">
+            <span class="size-dot"></span>
+          </button>
+          <button class="size-btn active" data-size="14" title="Medium" aria-label="Medium brush">
+            <span class="size-dot"></span>
+          </button>
+          <button class="size-btn" data-size="28" title="Thick" aria-label="Thick brush">
+            <span class="size-dot"></span>
+          </button>
         </div>
         <div class="tool-group">
           <button id="eraserBtn" class="btn tool icon" title="Eraser" aria-label="Eraser">
