@@ -481,13 +481,52 @@ function toCanvasPoint(e) {
 // gesture by finger count — touch-action is all-or-nothing per element — so the
 // canvas keeps touch-action: none and we move the page ourselves.
 const pointers = new Map(); // pointerId -> last client position
-let panFrom = null;         // centroid of the touches when panning
 
 function centroid() {
   let x = 0;
   let y = 0;
   for (const p of pointers.values()) { x += p.x; y += p.y; }
   return { x: x / pointers.size, y: y / pointers.size };
+}
+
+// The page is moved to a remembered anchor rather than nudged along by each
+// event. Nudging looked right and wasn't: two fingers means the browser sends
+// one pointermove *per finger*, so every frame applied two deltas computed from
+// a centroid where only one finger had moved, and any event it coalesced or
+// dropped left the page permanently offset from the hands holding it. Anchored,
+// the page is wherever the fingers say it is, however the events arrive.
+let panFrom = null;   // centroid when the pan was anchored
+let panScroll = null; // where the page was at that moment
+let panQueued = false;
+
+function anchorPan() {
+  panFrom = centroid();
+  panScroll = { x: window.scrollX, y: window.scrollY };
+}
+
+// Once per frame, not once per event — two fingers otherwise scroll the page
+// twice as often as it can paint.
+function panSoon() {
+  if (panQueued) return;
+  panQueued = true;
+  requestAnimationFrame(panToFingers);
+}
+
+function panToFingers() {
+  panQueued = false;
+  if (!panFrom || pointers.size < 2) return;
+
+  const now = centroid();
+  const wantX = panScroll.x + (panFrom.x - now.x);
+  const wantY = panScroll.y + (panFrom.y - now.y);
+  const maxX = Math.max(0, document.documentElement.scrollWidth - window.innerWidth);
+  const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  window.scrollTo(clamp(wantX, 0, maxX), clamp(wantY, 0, maxY));
+
+  // Past an edge there's nowhere to go, so drop a fresh anchor: otherwise all
+  // that travel is remembered and pulling back the other way does nothing until
+  // you've retraced it.
+  if (wantX < 0 || wantX > maxX || wantY < 0 || wantY > maxY) anchorPan();
 }
 
 // Take back the stroke the first finger already started, so a two-finger
@@ -510,7 +549,7 @@ canvas.addEventListener('pointerdown', (e) => {
   if (pointers.size > 1) {
     abortStroke();
     state.panning = true;
-    panFrom = centroid();
+    anchorPan();
     return;
   }
   // A finger left over from a scroll must not start drawing.
@@ -538,10 +577,7 @@ canvas.addEventListener('pointermove', (e) => {
   }
 
   if (state.panning) {
-    if (!panFrom || pointers.size < 2) return;
-    const now = centroid();
-    window.scrollBy(panFrom.x - now.x, panFrom.y - now.y);
-    panFrom = centroid(); // positions are client-relative, so re-read after the scroll
+    panSoon();
     return;
   }
 
@@ -561,7 +597,7 @@ function endPointer(e) {
     state.panning = false;
     panFrom = null;
   } else if (state.panning) {
-    panFrom = centroid();
+    anchorPan(); // the centroid just moved with the finger count, not with the hand
   }
   if (state.drawing) saveSoon(); // a stroke just finished
   state.drawing = null;
