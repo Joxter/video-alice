@@ -6,7 +6,8 @@ the ends, doodle on top, download the result.
 **[Try it →](https://joxter.github.io/video-alice/)**
 
 Everything runs in your browser. Your video is never uploaded anywhere — there is
-no server, no account, and no analytics.
+no server, no account, and no analytics. The only thing kept between visits is your
+drawings, in this browser's own local storage.
 
 ## What it does
 
@@ -25,6 +26,11 @@ no server, no account, and no analytics.
   doodle is how you make the previous one go away, and the eraser is for tidying the
   drawing you are on, not the one it inherited. To change an existing doodle, jump back
   to its own dot with the orange-dot buttons; drawing a step later starts a new one.
+
+  Drawings survive a reload: the strokes are kept in this browser's local storage,
+  under a `videoAlice:` prefix. There's no check that you came back with the same
+  video — load a different clip and the doodles are still there, at the same moments,
+  rescaled if the picture is a different shape.
 - **Play** — play/pause and stop (back to the start of the trim). Double chevrons
   jump a second, single chevrons one step. The outer buttons, marked with an orange
   dot, hop straight between the moments that already have a drawing.

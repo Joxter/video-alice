@@ -191,6 +191,11 @@ function setupVideo() {
   newBtn.classList.remove('hidden');
   setUIDisabled(false);
 
+  // The canvas has its size now and the grid its length, so the saved strokes
+  // have somewhere to land. When the duration needed repairing, lastStep is
+  // still 0 here and repairDuration does this instead.
+  if (state.lastStep) restoreDrawings();
+
   seek(0);
   shownStep = -1;
   renderKeyframes();
@@ -222,6 +227,7 @@ async function repairDuration(file) {
     if (state.file !== file) return; // a different video arrived while we read
     if (!isFinite(seconds) || seconds <= 0) throw new Error('no duration in the file');
     setDuration(seconds);
+    restoreDrawings(); // setupVideo had no grid to place them on yet
     renderKeyframes();
   } catch (err) {
     if (state.file !== file) return;
@@ -344,6 +350,79 @@ function redrawLayer(layer) {
   for (const s of layer.strokes) replayStroke(layer.ctx, s);
 }
 
+// ---------- Keeping the drawings between visits ----------
+// Only the strokes are stored: they *are* the drawing, and they're small. The
+// layer canvases get rebuilt from them, the same way undo already does it.
+//
+// Steps are absolute, so they survive a change of video on their own, but
+// coordinates belong to the preview canvas — its size goes along with them and
+// the strokes are rescaled if the next video is a different shape. There's no
+// check that it's even the same video: reopen the app, load something else and
+// last night's doodles come back, which is the point of keeping them at all.
+const STORE_PREFIX = 'videoAlice:';
+const STORE_DRAWINGS = `${STORE_PREFIX}drawings`;
+
+function saveDrawings() {
+  const tenth = (n) => Math.round(n * 10) / 10; // full float precision doubles the JSON
+  try {
+    localStorage.setItem(STORE_DRAWINGS, JSON.stringify({
+      width: canvas.width,
+      height: canvas.height,
+      layers: state.layers.map((l) => ({
+        step: l.step,
+        strokes: l.strokes.map((s) => ({
+          color: s.color,
+          size: s.size,
+          eraser: s.eraser,
+          points: s.points.map((p) => [tenth(p.x), tenth(p.y)]),
+        })),
+      })),
+    }));
+  } catch (err) {
+    // Out of quota, or a browser that won't store anything in private mode. The
+    // drawings on screen are unaffected, so this is worth no more than a note.
+    console.warn('Could not save the drawings:', err);
+  }
+}
+
+// Coalesced: a stroke ends, undo, clear — none of them need to hit the disk the
+// instant they happen, and a burst of them shouldn't serialise everything twice.
+let saveTimer = 0;
+function saveSoon() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveDrawings, 400);
+}
+window.addEventListener('pagehide', () => {
+  clearTimeout(saveTimer);
+  saveDrawings(); // leaving within the coalescing window shouldn't lose the last stroke
+});
+
+// Called once the duration is known, since a doodle past the end of *this* video
+// has nowhere to sit on the timeline.
+function restoreDrawings() {
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(STORE_DRAWINGS) || 'null');
+  } catch (err) {
+    console.warn('Could not read the saved drawings:', err);
+  }
+  if (!saved?.layers?.length || !saved.width || !saved.height) return;
+
+  const sx = canvas.width / saved.width;
+  const sy = canvas.height / saved.height;
+  for (const l of saved.layers) {
+    if (l.step > state.lastStep) continue;
+    const layer = createLayer(l.step);
+    layer.strokes = l.strokes.map((s) => ({
+      color: s.color,
+      eraser: s.eraser,
+      size: s.size * sx, // the brush was that thick relative to the picture
+      points: s.points.map(([x, y]) => ({ x: x * sx, y: y * sy })),
+    }));
+    redrawLayer(layer);
+  }
+}
+
 // Layers are rasterised at preview size, but the export goes out at the video's
 // own resolution. Strokes are geometry, so replaying them into a bigger canvas
 // costs nothing in quality — upscaling layer.canvas would have cost edges.
@@ -406,6 +485,7 @@ function abortStroke() {
   redrawLayer(layer);
   if (!layer.strokes.length) removeLayer(layer);
   state.drawing = null;
+  saveSoon();
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -468,6 +548,7 @@ function endPointer(e) {
   } else if (state.panning) {
     panFrom = centroid();
   }
+  if (state.drawing) saveSoon(); // a stroke just finished
   state.drawing = null;
 }
 canvas.addEventListener('pointerup', endPointer);
@@ -480,11 +561,14 @@ undoBtn.addEventListener('click', () => {
   layer.strokes.pop();
   redrawLayer(layer);
   if (!layer.strokes.length) removeLayer(layer);
+  saveSoon();
 });
 
 clearBtn.addEventListener('click', () => {
   const layer = activeLayerAt(state.step);
-  if (layer) removeLayer(layer);
+  if (!layer) return;
+  removeLayer(layer);
+  saveSoon();
 });
 
 // ---------- Toolbar ----------

@@ -15,6 +15,12 @@
     box-sizing: border-box;
 }
 
+/* Tapping a button twice in a row means twice, not zoom in. Only the buttons —
+   pinching the page is still fine. */
+button {
+    touch-action: manipulation;
+}
+
 body {
     margin: 0;
     font-family:
