@@ -341,7 +341,7 @@ main {
     gap: 2px;
     font-variant-numeric: tabular-nums;
 }
-/* Hundredths, so a few-frame nudge is visible in the number. */
+/* Tenths, the same grid the playhead stops on. */
 .time-now {
     font-size: 20px;
     font-weight: 600;
