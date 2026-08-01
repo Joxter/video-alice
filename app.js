@@ -72,6 +72,13 @@ const SKIP_SECONDS = 1;    // the double-chevron jump
 const FRAME_SECONDS = 1 / 30; // no reliable frame rate in the DOM, so assume 30fps
 const SKIP_FRAMES = 3;     // the single-chevron nudge, for landing on a moment
 
+// The preview canvas is never drawn wider than the 820px page — call it 1600
+// device pixels on a retina screen — so a 4K frame is four fifths wasted. Every
+// doodle layer is allocated at this size too, and those are what add up: one
+// full-size layer per keyframe is 33 MB at 4K, 3 MB here. The export doesn't
+// suffer for it, because it re-renders the strokes at the source's resolution.
+const PREVIEW_MAX = 1600;
+
 // Codec preference order, best-looking first. Filtered per output format.
 const VIDEO_CODECS = ['avc', 'vp9', 'av1', 'vp8'];
 const AUDIO_CODECS = ['aac', 'opus'];
@@ -79,6 +86,7 @@ const AUDIO_CODECS = ['aac', 'opus'];
 // ---------- State ----------
 const state = {
   file: null,   // the original File — mediabunny decodes from this, not the <video>
+  source: { width: 0, height: 0 }, // the video's own size; the export goes out at this
   duration: 0,
   trimStart: 0,
   trimEnd: 0,
@@ -96,8 +104,10 @@ const state = {
 // the readout or the buttons feel like they did nothing.
 function fmtTime(t) {
   if (!isFinite(t) || t < 0) t = 0;
-  const m = Math.floor(t / 60);
-  const s = t % 60;
+  // Round before splitting, or 59.999s formats as 0:60.00.
+  const cs = Math.round(t * 100);
+  const m = Math.floor(cs / 6000);
+  const s = (cs - m * 6000) / 100;
   return `${m}:${s < 10 ? '0' : ''}${s.toFixed(2)}`;
 }
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -121,21 +131,26 @@ dropZone.addEventListener('drop', (e) => {
 
 function loadFile(file) {
   state.file = file;
-  const url = URL.createObjectURL(file);
-  video.src = url;
+  if (video.src) URL.revokeObjectURL(video.src);
+  video.src = URL.createObjectURL(file);
   video.load();
 }
 
 video.addEventListener('loadedmetadata', setupVideo);
 
 function setupVideo() {
-  state.duration = video.duration;
   state.trimStart = 0;
-  state.trimEnd = video.duration;
   state.layers = [];
+  // A file whose header has no duration reads as Infinity. Leave the timeline
+  // empty rather than compute percentages of infinity, and go find the real
+  // length in the background.
+  setDuration(isFinite(video.duration) ? video.duration : 0);
+  if (!isFinite(video.duration)) repairDuration(state.file);
 
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  state.source = { width: video.videoWidth, height: video.videoHeight };
+  const shrink = Math.min(1, PREVIEW_MAX / Math.max(1, video.videoWidth, video.videoHeight));
+  canvas.width = Math.max(1, Math.round(video.videoWidth * shrink));
+  canvas.height = Math.max(1, Math.round(video.videoHeight * shrink));
   stage.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
 
   editorScreen.classList.remove('empty');
@@ -143,13 +158,38 @@ function setupVideo() {
   setUIDisabled(false);
 
   video.currentTime = 0;
+  shownTime = -1;
   renderKeyframes();
-  renderTimeline();
   setPlayIcon(false);
 
   if (!state.loopStarted) {
     state.loopStarted = true;
     requestAnimationFrame(renderLoop);
+  }
+}
+
+function setDuration(seconds) {
+  state.duration = seconds;
+  state.trimEnd = seconds;
+  renderTimeline();
+}
+
+// Anything MediaRecorder produced — including this app's own fallback export —
+// leaves the duration out of the header, so the DOM reports Infinity forever.
+// mediabunny gets it by reading the file we already have in hand.
+async function repairDuration(file) {
+  try {
+    const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
+    const seconds = await input.computeDuration();
+    if (state.file !== file) return; // a different video arrived while we read
+    if (!isFinite(seconds) || seconds <= 0) throw new Error('no duration in the file');
+    setDuration(seconds);
+    renderKeyframes();
+  } catch (err) {
+    if (state.file !== file) return;
+    console.error('Could not work out how long the video is:', err);
+    alert('Sorry, this video can’t be edited — its length is missing from the file.');
+    resetApp();
   }
 }
 
@@ -161,13 +201,27 @@ function resetApp() {
   video.load();
   state.layers = [];
   state.file = null;
+  state.source = { width: 0, height: 0 };
+  state.trimStart = 0;
+  setDuration(0);
   fileInput.value = '';
+  // The inline ratio outranks the empty-state rule, so the drop zone would
+  // otherwise keep the shape of the video that just left.
+  stage.style.aspectRatio = '';
+  renderKeyframes();
   editorScreen.classList.add('empty');
   newBtn.classList.add('hidden');
   setUIDisabled(true);
 }
 
 // ---------- Layers (doodle keyframes) ----------
+// A layer replaces the one before it rather than adding to it: what you see at
+// time t is exactly one layer, the newest one at or before t. So a fresh
+// keyframe starts blank, and drawing anything at t clears whatever an earlier
+// keyframe was still showing there. That's the intended feel — a doodle lasts
+// until the next one, and starting a new one is how you make the old one go.
+// Reworking an existing doodle means going back to its own dot (the jump
+// buttons are there for that) rather than drawing a moment later.
 function createLayer(time) {
   const c = document.createElement('canvas');
   c.width = canvas.width;
@@ -195,11 +249,12 @@ function activeLayerAt(t) {
 }
 
 // Layer to draw onto right now: reuse a nearby keyframe, else make a new one.
+// Only ever snap backwards — a keyframe just ahead of the playhead isn't the one
+// on screen, so drawing into it would look like the brush did nothing.
 function layerForDrawing() {
   const t = video.currentTime;
-  let layer = state.layers.find((l) => Math.abs(l.time - t) < SNAP_SECONDS);
-  if (!layer) layer = createLayer(t);
-  return layer;
+  const shown = activeLayerAt(t);
+  return shown && t - shown.time < SNAP_SECONDS ? shown : createLayer(t);
 }
 
 // ---------- Stroke drawing ----------
@@ -248,6 +303,36 @@ function replayStroke(context, stroke) {
 function redrawLayer(layer) {
   layer.ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
   for (const s of layer.strokes) replayStroke(layer.ctx, s);
+}
+
+// Layers are rasterised at preview size, but the export goes out at the video's
+// own resolution. Strokes are geometry, so replaying them into a bigger canvas
+// costs nothing in quality — upscaling layer.canvas would have cost edges.
+//
+// Returns a function that hands back that canvas for a given layer. Frames are
+// encoded in timestamp order, so only one layer is ever live: keep a single
+// buffer and re-render it when the doodle changes, instead of holding a
+// full-size copy of every keyframe at once.
+function layerRasterizer(width, height) {
+  const out = document.createElement('canvas');
+  out.width = width;
+  out.height = height;
+  const context = out.getContext('2d');
+  let current = null;
+
+  return (layer) => {
+    if (!layer) return null;
+    if (layer !== current) {
+      current = layer;
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      context.clearRect(0, 0, width, height);
+      // Scaling the pen along with the points keeps every line the same
+      // thickness relative to the picture as it was on screen.
+      context.setTransform(width / layer.canvas.width, 0, 0, height / layer.canvas.height, 0, 0);
+      for (const s of layer.strokes) replayStroke(context, s);
+    }
+    return out;
+  };
 }
 
 // ---------- Pointer drawing on the canvas ----------
@@ -464,6 +549,13 @@ function setPlayIcon(playing) {
 
 // ---------- Render loop ----------
 function renderLoop() {
+  // The export overlay covers the stage, and both export paths composite onto
+  // their own canvas — so there is nothing to keep repainting here.
+  if (state.exporting) {
+    requestAnimationFrame(renderLoop);
+    return;
+  }
+
   if (video.readyState >= 2 && canvas.width) {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const layer = activeLayerAt(video.currentTime);
@@ -481,10 +573,14 @@ function renderLoop() {
   requestAnimationFrame(renderLoop);
 }
 
+// Called every frame, so skip the DOM writes while the playhead sits still —
+// which is most of the time in an editor like this.
+let shownTime = -1;
 function updatePlayhead() {
-  if (!state.duration) return;
-  playhead.style.left = `${(video.currentTime / state.duration) * 100}%`;
-  timeLabel.textContent = fmtTime(video.currentTime);
+  if (!state.duration || video.currentTime === shownTime) return;
+  shownTime = video.currentTime;
+  playhead.style.left = `${(shownTime / state.duration) * 100}%`;
+  timeLabel.textContent = fmtTime(shownTime);
   updateDrawNav();
 }
 
@@ -508,6 +604,7 @@ function renderKeyframes() {
     dot.style.left = `${(l.time / d) * 100}%`;
     keyframesEl.appendChild(dot);
   }
+  updateDrawNav(); // the dots and the jump buttons describe the same set
 }
 
 function timeFromEvent(e) {
@@ -540,8 +637,8 @@ timeline.addEventListener('pointerdown', (e) => {
 function handleDrag(e) {
   if (!dragTarget) return;
   const t = timeFromEvent(e);
-  // Moving a handle no longer drags the playhead along: sitting outside the
-  // trim is allowed now.
+  // Moving a handle leaves the playhead where it is — sitting outside the trim
+  // is allowed, so you can look at what you cut.
   if (dragTarget === 'start') {
     state.trimStart = clamp(t, 0, state.trimEnd - MIN_TRIM);
     renderTimeline();
@@ -564,7 +661,9 @@ function seek(t) {
 // ---------- Keyboard niceties ----------
 window.addEventListener('keydown', (e) => {
   if (editorScreen.classList.contains('empty') || state.exporting) return;
-  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  // Space on a focused button is that button's own shortcut — leave it alone,
+  // or clicking Play once and then pressing Space toggles playback twice.
+  if (e.code === 'Space' && !e.target.closest?.('button')) { e.preventDefault(); togglePlay(); }
   // Shift narrows the jump to a few frames, matching the single chevrons.
   if (e.code === 'ArrowLeft') { e.preventDefault(); skip(e.shiftKey ? -FRAME_STEP : -SKIP_SECONDS); }
   if (e.code === 'ArrowRight') { e.preventDefault(); skip(e.shiftKey ? FRAME_STEP : SKIP_SECONDS); }
@@ -626,7 +725,7 @@ async function exportVideo() {
   try {
     if (HAS_WEBCODECS) {
       try {
-        setExportLabel('Making your video…');
+        exportLabel.textContent = 'Making your video…';
         await exportWithWebCodecs();
         return;
       } catch (err) {
@@ -638,7 +737,7 @@ async function exportVideo() {
     }
     // The suffix is deliberate: it tells us which path ran when something looks
     // wrong in the downloaded file.
-    setExportLabel('Making your video… (recording)');
+    exportLabel.textContent = 'Making your video… (recording)';
     progressBar.style.width = '0%';
     await exportWithRecorder();
   } catch (err) {
@@ -650,14 +749,6 @@ async function exportVideo() {
     setUIDisabled(false);
     exportOverlay.classList.add('hidden');
   }
-}
-
-// Thrown when this browser can't do the WebCodecs path — the signal to fall back
-// rather than show an error.
-class UnsupportedHereError extends Error {}
-
-function setExportLabel(text) {
-  if (exportLabel) exportLabel.textContent = text;
 }
 
 // Errors from deep in an encoder are often bare DOMExceptions; the name carries
@@ -678,12 +769,13 @@ async function exportWithWebCodecs() {
   if (!videoTrack) throw new Error('That file doesn’t have a video track.');
   const audioTrack = await input.getPrimaryAudioTrack();
 
-  // H.264 needs even dimensions; keep the preview's aspect ratio.
-  const width = Math.max(2, Math.floor(canvas.width / 2) * 2);
-  const height = Math.max(2, Math.floor(canvas.height / 2) * 2);
+  // Out at the video's own resolution, not the preview's. H.264 needs even
+  // dimensions.
+  const width = Math.max(2, Math.floor(state.source.width / 2) * 2);
+  const height = Math.max(2, Math.floor(state.source.height / 2) * 2);
 
   const encoding = await pickEncoding(width, height, audioTrack);
-  if (!encoding) throw new UnsupportedHereError('no encodable video codec');
+  if (!encoding) throw new Error('no encodable video codec');
   const { format, videoCodec, audioCodec } = encoding;
 
   // Offscreen stage: same compositing as the preview, at export resolution.
@@ -705,14 +797,16 @@ async function exportWithWebCodecs() {
 
   await output.start();
 
+  const rasterize = layerRasterizer(width, height);
+
   const pumpVideo = async () => {
     const sink = new VideoSampleSink(videoTrack);
     for await (const sample of sink.samples(trimStart, trimEnd)) {
       outCtx.clearRect(0, 0, width, height);
       sample.draw(outCtx, 0, 0, width, height);
 
-      const layer = activeLayerAt(sample.timestamp);
-      if (layer) outCtx.drawImage(layer.canvas, 0, 0, width, height);
+      const doodle = rasterize(activeLayerAt(sample.timestamp));
+      if (doodle) outCtx.drawImage(doodle, 0, 0);
 
       // Shift onto the trimmed timeline, and never let the last frame spill
       // past the trim end.
@@ -796,9 +890,10 @@ async function exportWithRecorder() {
   // preview sits above a visible <video>, so a failed drawImage there looks
   // fine on screen but records as a black frame with only the doodles on it.
   const out = document.createElement('canvas');
-  out.width = canvas.width;
-  out.height = canvas.height;
+  out.width = state.source.width;
+  out.height = state.source.height;
   const outCtx = out.getContext('2d');
+  const rasterize = layerRasterizer(out.width, out.height);
 
   let painting = 0;
   const paint = () => {
@@ -811,8 +906,8 @@ async function exportWithRecorder() {
         console.warn('Could not draw the video frame:', err);
       }
     }
-    const layer = activeLayerAt(video.currentTime);
-    if (layer) outCtx.drawImage(layer.canvas, 0, 0, out.width, out.height);
+    const doodle = rasterize(activeLayerAt(video.currentTime));
+    if (doodle) outCtx.drawImage(doodle, 0, 0);
     painting = requestAnimationFrame(paint);
   };
   paint();
@@ -829,8 +924,8 @@ async function exportWithRecorder() {
     let settled = false;
 
     // Recording ends at whichever comes first: reaching the trim end, the clip
-    // ending, or a safety timeout. The old version watched only `paused`, which
-    // the `ended` event could beat — that's what made it hang forever.
+    // ending, or a safety timeout. All three are needed — watching `paused`
+    // alone hangs forever when `ended` beats it.
     const finish = () => {
       if (settled) return;
       settled = true;

@@ -166,9 +166,11 @@ main {
 
 .stage {
     position: relative;
-    /* Sized from the page width only. Keying off the viewport height instead
-       made the video jump every time a mobile browser's chrome slid away. */
+    /* Sized from the page width only, at the video's aspect ratio (set inline
+       once the video loads). Keying off the viewport height instead made the
+       video jump every time a mobile browser's chrome slid away. */
     width: 100%;
+    aspect-ratio: 16 / 9;
     margin: 0 auto;
     background: #0d1017;
     border-radius: var(--radius);
@@ -195,11 +197,6 @@ main {
     touch-action: none;
     cursor: crosshair;
 }
-/* Sizer keeps the stage at the video's aspect ratio */
-.stage {
-    aspect-ratio: 16 / 9;
-}
-
 .export-overlay {
     position: absolute;
     inset: 0;

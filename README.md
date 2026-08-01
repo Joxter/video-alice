@@ -19,6 +19,12 @@ no server, no account, and no analytics.
 - **Draw** — pause anywhere and doodle. Each doodle is pinned to that moment (an orange
   dot on the timeline) and stays on screen until the next doodle takes over. Ten colors,
   three brush sizes, eraser, undo, clear.
+
+  A doodle *replaces* the one before it, it doesn't add to it. Exactly one drawing is on
+  screen at a time — the most recent one at or before the playhead — so starting a new
+  doodle is how you make the previous one go away, and the eraser is for tidying the
+  drawing you are on, not the one it inherited. To change an existing doodle, jump back
+  to its own dot with the orange-dot buttons; drawing a moment later starts a new one.
 - **Play** — play/pause and stop (back to the start of the trim). Double chevrons
   jump a second; single chevrons nudge a few frames, for landing exactly on the
   moment you want to draw over. The outer buttons, marked with an orange dot, hop
@@ -61,8 +67,12 @@ but instead of the `<video>` element, frames come from
 [mediabunny](https://mediabunny.dev), which decodes the original file with WebCodecs:
 
 1. `VideoSampleSink.samples(trimStart, trimEnd)` yields exactly the frames inside the trim.
-2. Each frame is drawn to an offscreen canvas, and the doodle layer for that frame's
-   timestamp is drawn on top.
+2. Each frame is drawn to an offscreen canvas at the video's own resolution, and the
+   doodle for that frame's timestamp is drawn on top. The doodle is re-rendered from
+   its strokes at that resolution rather than scaled up from the preview: on screen
+   the drawing layers are capped at 1600px, since that's more than the page can show
+   and a full-size layer per doodle is what makes a 4K clip expensive to keep in
+   memory.
 3. `CanvasSource` encodes the composited canvas; audio is decoded and re-encoded in
    parallel, with timestamps shifted onto the trimmed timeline so it stays in sync.
 4. The muxed result downloads as an MP4.
