@@ -53,6 +53,7 @@ const clearBtn = $('clearBtn');
 const downloadBtn = $('downloadBtn');
 
 const exportOverlay = $('exportOverlay');
+const exportLabel = $('exportLabel');
 const progressBar = $('progressBar');
 
 // ---------- Constants ----------
@@ -493,21 +494,29 @@ async function exportVideo() {
   video.pause();
   setPlayIcon(false);
 
+  let firstError = null;
   try {
     if (HAS_WEBCODECS) {
       try {
+        setExportLabel('Making your video…');
         await exportWithWebCodecs();
+        return;
       } catch (err) {
-        if (!(err instanceof UnsupportedHereError)) throw err;
-        console.warn('WebCodecs export unavailable, recording instead:', err.message);
-        await exportWithRecorder();
+        // Any failure here — an unsupported codec, or a browser quirk deep in
+        // the encoder — is worth retrying with the recorder before giving up.
+        firstError = err;
+        console.warn('WebCodecs export failed, recording instead:', err);
       }
-    } else {
-      await exportWithRecorder();
     }
+    // The suffix is deliberate: it tells us which path ran when something looks
+    // wrong in the downloaded file.
+    setExportLabel('Making your video… (recording)');
+    progressBar.style.width = '0%';
+    await exportWithRecorder();
   } catch (err) {
-    console.error(err);
-    alert('Sorry, making the video didn’t work.\n\n' + (err && err.message ? err.message : err));
+    console.error('Export failed:', err, '(earlier:', firstError, ')');
+    alert('Sorry, making the video didn’t work.\n\n' + describeError(err)
+      + (firstError ? `\n\nFirst tried: ${describeError(firstError)}` : ''));
   } finally {
     state.exporting = false;
     setUIDisabled(false);
@@ -518,6 +527,18 @@ async function exportVideo() {
 // Thrown when this browser can't do the WebCodecs path — the signal to fall back
 // rather than show an error.
 class UnsupportedHereError extends Error {}
+
+function setExportLabel(text) {
+  if (exportLabel) exportLabel.textContent = text;
+}
+
+// Errors from deep in an encoder are often bare DOMExceptions; the name carries
+// as much information as the message, so show both.
+function describeError(err) {
+  if (!err) return 'Unknown error.';
+  if (err.name && err.message) return `${err.name}: ${err.message}`;
+  return String(err.message || err.name || err);
+}
 
 async function exportWithWebCodecs() {
   const trimStart = state.trimStart;
@@ -643,7 +664,32 @@ async function exportWithRecorder() {
 
   await seekAndWait(trimStart);
 
-  const stream = canvas.captureStream(30);
+  // Composite onto our own canvas rather than capturing the preview one. The
+  // preview sits above a visible <video>, so a failed drawImage there looks
+  // fine on screen but records as a black frame with only the doodles on it.
+  const out = document.createElement('canvas');
+  out.width = canvas.width;
+  out.height = canvas.height;
+  const outCtx = out.getContext('2d');
+
+  let painting = 0;
+  const paint = () => {
+    outCtx.fillStyle = '#000';
+    outCtx.fillRect(0, 0, out.width, out.height);
+    if (video.readyState >= 2) {
+      try {
+        outCtx.drawImage(video, 0, 0, out.width, out.height);
+      } catch (err) {
+        console.warn('Could not draw the video frame:', err);
+      }
+    }
+    const layer = activeLayerAt(video.currentTime);
+    if (layer) outCtx.drawImage(layer.canvas, 0, 0, out.width, out.height);
+    painting = requestAnimationFrame(paint);
+  };
+  paint();
+
+  const stream = out.captureStream(30);
   for (const track of recorderAudioTracks()) stream.addTrack(track);
 
   const mime = pickRecorderMimeType();
@@ -660,6 +706,7 @@ async function exportWithRecorder() {
     const finish = () => {
       if (settled) return;
       settled = true;
+      cancelAnimationFrame(painting);
       clearInterval(ticker);
       clearTimeout(safety);
       video.removeEventListener('ended', finish);
