@@ -17,7 +17,8 @@ no server, no account, and no analytics.
   three brush sizes, eraser, undo, clear.
 - **Play** — play/pause and stop (back to the start of the trim). Double chevrons
   jump a second; single chevrons nudge a few frames, for landing exactly on the
-  moment you want to draw over.
+  moment you want to draw over. The outer buttons, marked with an orange dot, hop
+  straight between the moments that already have a drawing.
 - **Download** — get an MP4 with the trim and the doodles baked in.
 
 Shortcuts: <kbd>Space</kbd> to play/pause, <kbd>←</kbd> / <kbd>→</kbd> to skip a second

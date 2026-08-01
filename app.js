@@ -49,6 +49,8 @@ const backSecBtn = $('backSecBtn');
 const fwdSecBtn = $('fwdSecBtn');
 const backFrameBtn = $('backFrameBtn');
 const fwdFrameBtn = $('fwdFrameBtn');
+const prevDrawBtn = $('prevDrawBtn');
+const nextDrawBtn = $('nextDrawBtn');
 const swatchesEl = $('swatches');
 const sizesEl = $('sizes');
 const eraserBtn = $('eraserBtn');
@@ -371,6 +373,35 @@ fwdSecBtn.addEventListener('click', () => skip(SKIP_SECONDS));
 backFrameBtn.addEventListener('click', () => skip(-FRAME_STEP));
 fwdFrameBtn.addEventListener('click', () => skip(FRAME_STEP));
 
+// Hop between the moments that carry a doodle — the orange dots on the timeline.
+prevDrawBtn.addEventListener('click', () => jumpToDrawing(-1));
+nextDrawBtn.addEventListener('click', () => jumpToDrawing(1));
+
+function jumpToDrawing(direction) {
+  if (state.exporting) return;
+  const now = video.currentTime;
+  let target = null;
+  for (const layer of state.layers) {
+    // The epsilon stops a jump landing on the doodle we just left.
+    if (direction < 0 ? layer.time < now - 0.05 : layer.time > now + 0.05) {
+      if (target === null || (direction < 0 ? layer.time > target : layer.time < target)) {
+        target = layer.time;
+      }
+    }
+  }
+  if (target === null) return;
+  if (!video.paused) { video.pause(); setPlayIcon(false); }
+  seek(target);
+}
+
+// Nothing to jump to until there are doodles either side of the playhead.
+function updateDrawNav() {
+  if (state.exporting) return;
+  const now = video.currentTime;
+  prevDrawBtn.disabled = !state.layers.some((l) => l.time < now - 0.05);
+  nextDrawBtn.disabled = !state.layers.some((l) => l.time > now + 0.05);
+}
+
 // Stepping is for lining up a doodle, so it pauses first — otherwise playback
 // runs straight past the frame you were aiming for. It ranges over the whole
 // clip: you may want to draw just outside the trim, or check what you cut.
@@ -408,6 +439,7 @@ function updatePlayhead() {
   if (!state.duration) return;
   playhead.style.left = `${(video.currentTime / state.duration) * 100}%`;
   timeLabel.textContent = fmtTime(video.currentTime);
+  updateDrawNav();
 }
 
 // ---------- Timeline ----------
@@ -810,7 +842,8 @@ function downloadBlob(blob, filename) {
 
 function setUIDisabled(disabled) {
   [playBtn, stopBtn, backSecBtn, fwdSecBtn, backFrameBtn, fwdFrameBtn,
-    undoBtn, clearBtn, eraserBtn, downloadBtn, newBtn]
+    prevDrawBtn, nextDrawBtn, undoBtn, clearBtn, eraserBtn, downloadBtn, newBtn]
     .forEach((b) => (b.disabled = disabled));
   canvas.style.pointerEvents = disabled ? 'none' : '';
+  if (!disabled) updateDrawNav(); // these two depend on where the doodles are
 }

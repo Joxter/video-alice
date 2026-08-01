@@ -293,9 +293,19 @@ main {
 /* Controls */
 .controls {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
+}
+/* The marker echoes the keyframe dots on the timeline. */
+.dot-mark {
+    fill: #f5a623;
+    stroke: none;
+}
+.btn.round.dot {
+    width: 40px;
+    height: 40px;
 }
 .btn.play,
 .btn.round {
@@ -406,6 +416,24 @@ main {
 }
 
 @media (max-width: 560px) {
+    /* Eight transport buttons only fit on one row if they shrink a little. */
+    .controls {
+        gap: 6px;
+    }
+    .btn.play {
+        width: 46px;
+        height: 46px;
+    }
+    .btn.round,
+    .btn.round.small,
+    .btn.round.dot {
+        width: 36px;
+        height: 36px;
+    }
+    .btn.round svg {
+        width: 17px;
+        height: 17px;
+    }
     .toolbar {
         justify-content: center;
     }
