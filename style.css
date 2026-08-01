@@ -520,14 +520,16 @@ main {
     }
 }
 
-/* Drawing and trimming swallow touch events, so on narrow screens keep a strip
-   free down both sides for scrolling the page. */
-@media (max-width: 760px) {
+/* Drawing and trimming swallow every touch that lands on them, so keep a strip
+   free down both sides of the editor with nothing but page underneath. It is the
+   only way to scroll on a touch screen, so it's sized as a comfortable target
+   rather than as a sliver, and it's keyed off having a finger rather than off a
+   narrow window: an iPad in portrait is wider than any phone breakpoint and had
+   no gutter at all, which is exactly where scrolling was worst. */
+@media (pointer: coarse) {
     :root {
-        --scroll-gutter: 40px;
+        --scroll-gutter: 48px;
     }
-    /* The timeline keeps its full width: the jump buttons sit in its margins,
-       and a button is fine to scroll over. */
     .stage {
         /* width must be explicit: an auto margin cancels the flex stretch that
        would otherwise size this, collapsing it to its content. */
@@ -535,5 +537,15 @@ main {
         max-width: calc(100% - var(--scroll-gutter) * 2);
         margin-left: auto;
         margin-right: auto;
+    }
+    /* The timeline row keeps the full width, with the jump buttons filling the
+       gutters beside the track — so the track still lines up with the video
+       above it, and those buttons are fine to scroll over. */
+    .timeline-row {
+        gap: 4px;
+    }
+    .btn.round.dot {
+        width: 44px;
+        height: 44px;
     }
 }

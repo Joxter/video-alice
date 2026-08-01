@@ -107,8 +107,7 @@ const state = {
   trimEnd: 0,
   layers: [],   // { step, canvas, ctx, strokes:[{color,size,eraser,points:[{x,y}]}] }
   tool: { color: COLORS[0], size: 14, eraser: false },
-  drawing: null, // { layer, stroke }
-  panning: false, // two or more fingers on the canvas: scrolling, not drawing
+  drawing: null, // { pointerId, layer, stroke }
   exporting: false,
   audioTap: null, // WebAudio tap on the <video>, built once for recorder exports
 };
@@ -477,83 +476,17 @@ function toCanvasPoint(e) {
   };
 }
 
-// One finger draws; two or more scroll the page. The browser can't split a
-// gesture by finger count — touch-action is all-or-nothing per element — so the
-// canvas keeps touch-action: none and we move the page ourselves.
-const pointers = new Map(); // pointerId -> last client position
-
-function centroid() {
-  let x = 0;
-  let y = 0;
-  for (const p of pointers.values()) { x += p.x; y += p.y; }
-  return { x: x / pointers.size, y: y / pointers.size };
-}
-
-// The page is moved to a remembered anchor rather than nudged along by each
-// event. Nudging looked right and wasn't: two fingers means the browser sends
-// one pointermove *per finger*, so every frame applied two deltas computed from
-// a centroid where only one finger had moved, and any event it coalesced or
-// dropped left the page permanently offset from the hands holding it. Anchored,
-// the page is wherever the fingers say it is, however the events arrive.
-let panFrom = null;   // centroid when the pan was anchored
-let panScroll = null; // where the page was at that moment
-let panQueued = false;
-
-function anchorPan() {
-  panFrom = centroid();
-  panScroll = { x: window.scrollX, y: window.scrollY };
-}
-
-// Once per frame, not once per event — two fingers otherwise scroll the page
-// twice as often as it can paint.
-function panSoon() {
-  if (panQueued) return;
-  panQueued = true;
-  requestAnimationFrame(panToFingers);
-}
-
-function panToFingers() {
-  panQueued = false;
-  if (!panFrom || pointers.size < 2) return;
-
-  const now = centroid();
-  const wantX = panScroll.x + (panFrom.x - now.x);
-  const wantY = panScroll.y + (panFrom.y - now.y);
-  const maxX = Math.max(0, document.documentElement.scrollWidth - window.innerWidth);
-  const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-  window.scrollTo(clamp(wantX, 0, maxX), clamp(wantY, 0, maxY));
-
-  // Past an edge there's nowhere to go, so drop a fresh anchor: otherwise all
-  // that travel is remembered and pulling back the other way does nothing until
-  // you've retraced it.
-  if (wantX < 0 || wantX > maxX || wantY < 0 || wantY > maxY) anchorPan();
-}
-
-// Take back the stroke the first finger already started, so a two-finger
-// scroll never leaves a stray mark behind.
-function abortStroke() {
-  if (!state.drawing) return;
-  const { layer, stroke } = state.drawing;
-  const i = layer.strokes.indexOf(stroke);
-  if (i >= 0) layer.strokes.splice(i, 1);
-  redrawLayer(layer);
-  if (!layer.strokes.length) removeLayer(layer);
-  state.drawing = null;
-  saveSoon();
-}
-
+// The canvas takes every touch that lands on it — touch-action is all-or-nothing
+// per element, and the brush needs `none` — so the page is scrolled by the strip
+// of margin either side of the video instead. Emulating a two-finger scroll here
+// was tried and reverted: the browser decides who owns a gesture at the first
+// touch and won't reconsider, so the page had to be dragged along from JS, which
+// on an iPad fought Safari's own scrolling and juddered.
 canvas.addEventListener('pointerdown', (e) => {
   if (state.exporting) return;
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-  if (pointers.size > 1) {
-    abortStroke();
-    state.panning = true;
-    anchorPan();
-    return;
-  }
-  // A finger left over from a scroll must not start drawing.
-  if (state.panning) return;
+  // One stroke at a time. A second finger landing mustn't start a rival stroke
+  // or take the first one over.
+  if (state.drawing) return;
 
   video.pause();
   canvas.setPointerCapture(e.pointerId);
@@ -567,21 +500,12 @@ canvas.addEventListener('pointerdown', (e) => {
     points: [pt],
   };
   layer.strokes.push(stroke);
-  state.drawing = { layer, stroke };
+  state.drawing = { pointerId: e.pointerId, layer, stroke };
   drawDot(layer.ctx, stroke, pt);
 });
 
 canvas.addEventListener('pointermove', (e) => {
-  if (pointers.has(e.pointerId)) {
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  }
-
-  if (state.panning) {
-    panSoon();
-    return;
-  }
-
-  if (!state.drawing) return;
+  if (state.drawing?.pointerId !== e.pointerId) return;
   const { layer, stroke } = state.drawing;
   const pt = toCanvasPoint(e);
   const prev = stroke.points[stroke.points.length - 1];
@@ -590,17 +514,9 @@ canvas.addEventListener('pointermove', (e) => {
 });
 
 function endPointer(e) {
-  pointers.delete(e.pointerId);
-  if (pointers.size === 0) {
-    // Only stop panning once every finger is off, so lifting one of two doesn't
-    // hand the gesture back to the brush mid-scroll.
-    state.panning = false;
-    panFrom = null;
-  } else if (state.panning) {
-    anchorPan(); // the centroid just moved with the finger count, not with the hand
-  }
-  if (state.drawing) saveSoon(); // a stroke just finished
+  if (state.drawing?.pointerId !== e.pointerId) return;
   state.drawing = null;
+  saveSoon(); // a stroke just finished
 }
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);

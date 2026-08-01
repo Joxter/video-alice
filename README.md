@@ -57,9 +57,10 @@ to strand a fresh drawing a hair ahead of the playhead, invisible until playback
 Playback and the exported file are untouched by any of this. Those are as smooth as the
 source; it's only where you can *stop* that is quantised.
 
-On a touch screen, one finger on the video draws and two fingers scroll the page.
-The video and timeline also leave a strip free down each side on narrow screens,
-since drawing and trimming otherwise swallow every touch.
+On a touch screen the video and the timeline swallow every touch that lands on
+them — that's what makes the brush and the trim handles work — so the editor keeps
+a 48px strip free down both sides to scroll the page by. The jump buttons sit in
+that strip beside the track and are fine to scroll over.
 
 ## Running it locally
 
