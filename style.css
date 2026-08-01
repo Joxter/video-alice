@@ -147,7 +147,11 @@ main {
     background: #0d1017;
     border-radius: var(--radius);
     overflow: hidden;
-    box-shadow: var(--shadow);
+    /* A wide, soft halo so the video sits off the page rather than on it. */
+    box-shadow:
+        0 2px 6px rgba(20, 24, 40, 0.1),
+        0 12px 28px rgba(20, 24, 40, 0.14),
+        0 28px 70px rgba(20, 24, 40, 0.16);
     line-height: 0;
 }
 .stage video,
@@ -205,7 +209,16 @@ main {
     flex-direction: column;
     gap: 6px;
 }
+/* The drawing-jump buttons live in the margins beside the track, which lines
+   the track up with the video above it. */
+.timeline-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
 .timeline {
+    flex: 1;
+    min-width: 0;
     position: relative;
     height: 44px;
     background: var(--surface);
@@ -304,8 +317,9 @@ main {
     stroke: none;
 }
 .btn.round.dot {
-    width: 40px;
-    height: 40px;
+    flex: none;
+    width: 38px;
+    height: 38px;
 }
 .btn.play,
 .btn.round {
@@ -416,23 +430,13 @@ main {
 }
 
 @media (max-width: 560px) {
-    /* Eight transport buttons only fit on one row if they shrink a little. */
-    .controls {
-        gap: 6px;
+    /* Sized so the track ends up as wide as the video above it. */
+    .timeline-row {
+        gap: 4px;
     }
-    .btn.play {
-        width: 46px;
-        height: 46px;
-    }
-    .btn.round,
-    .btn.round.small,
     .btn.round.dot {
-        width: 36px;
-        height: 36px;
-    }
-    .btn.round svg {
-        width: 17px;
-        height: 17px;
+        width: 34px;
+        height: 34px;
     }
     .toolbar {
         justify-content: center;
@@ -455,10 +459,11 @@ main {
     :root {
         --scroll-gutter: 40px;
     }
-    .stage,
-    .timeline-wrap {
+    /* The timeline keeps its full width: the jump buttons sit in its margins,
+       and a button is fine to scroll over. */
+    .stage {
         /* width must be explicit: an auto margin cancels the flex stretch that
-       would otherwise size these, collapsing them to their content. */
+       would otherwise size this, collapsing it to its content. */
         width: 100%;
         max-width: min(
             var(--stage-max-w, 100%),
