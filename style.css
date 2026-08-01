@@ -1,284 +1,436 @@
 :root {
-  --bg: #f5f6f8;
-  --surface: #ffffff;
-  --border: #e2e4e9;
-  --text: #1f2430;
-  --muted: #6b7280;
-  --accent: #2f6df6;
-  --accent-hover: #245ad6;
-  --radius: 12px;
-  --shadow: 0 1px 3px rgba(20, 24, 40, 0.08), 0 6px 20px rgba(20, 24, 40, 0.06);
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --border: #e2e4e9;
+    --text: #1f2430;
+    --muted: #6b7280;
+    --accent: #2f6df6;
+    --accent-hover: #245ad6;
+    --radius: 12px;
+    --shadow:
+        0 1px 3px rgba(20, 24, 40, 0.08), 0 6px 20px rgba(20, 24, 40, 0.06);
 }
 
-* { box-sizing: border-box; }
+* {
+    box-sizing: border-box;
+}
 
 body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  color: var(--text);
-  background: var(--bg);
-  -webkit-font-smoothing: antialiased;
+    margin: 0;
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+        sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
 }
 
-.hidden { display: none !important; }
+.hidden {
+    display: none !important;
+}
 
 .topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
 }
 
 .topbar h1 {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0;
-  letter-spacing: -0.01em;
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
 }
 
 main {
-  max-width: 820px;
-  margin: 0 auto;
-  padding: 24px 16px 48px;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
 }
 
 /* Buttons */
 .btn {
-  font: inherit;
-  font-weight: 500;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  padding: 10px 16px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+    font: inherit;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    padding: 10px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition:
+        background 0.15s,
+        border-color 0.15s,
+        transform 0.05s;
 }
-.btn:hover { border-color: #cdd0d8; }
-.btn:active { transform: translateY(1px); }
+.btn:hover {
+    border-color: #cdd0d8;
+}
+.btn:active {
+    transform: translateY(1px);
+}
 .btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
 }
-.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
-.btn.ghost:hover { background: #eceef2; }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+.btn.ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+}
+.btn.ghost:hover {
+    background: #eceef2;
+}
+.btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
 
 /* Upload */
-.upload { display: flex; justify-content: center; padding-top: 32px; }
-.dropzone {
-  width: 100%;
-  max-width: 520px;
-  border: 2px dashed var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  padding: 48px 24px;
-  text-align: center;
-  transition: border-color 0.15s, background 0.15s;
+.upload {
+    display: flex;
+    justify-content: center;
+    padding-top: 32px;
 }
-.dropzone.dragover { border-color: var(--accent); background: #f0f5ff; }
-.drop-title { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
-.drop-hint { color: var(--muted); margin: 4px 0 16px; }
-.drop-note { color: var(--muted); font-size: 13px; margin: 20px 0 0; }
+.dropzone {
+    width: 100%;
+    max-width: 520px;
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 48px 24px;
+    text-align: center;
+    transition:
+        border-color 0.15s,
+        background 0.15s;
+}
+.dropzone.dragover {
+    border-color: var(--accent);
+    background: #f0f5ff;
+}
+.drop-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 4px;
+}
+.drop-hint {
+    color: var(--muted);
+    margin: 4px 0 16px;
+}
+.drop-note {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 20px 0 0;
+}
 
 /* Editor */
-.editor { display: flex; flex-direction: column; gap: 16px; }
+.editor {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
 
 .stage {
-  position: relative;
-  width: 100%;
-  /* JS sets --stage-max-w from the clip's shape so tall videos stay on screen. */
-  max-width: min(var(--stage-max-w, 100%), 100%);
-  margin: 0 auto;
-  background: #0d1017;
-  border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: var(--shadow);
-  line-height: 0;
+    position: relative;
+    width: 100%;
+    /* JS sets --stage-max-w from the clip's shape so tall videos stay on screen. */
+    max-width: min(var(--stage-max-w, 100%), 100%);
+    margin: 0 auto;
+    background: #0d1017;
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    line-height: 0;
 }
 .stage video,
 .stage canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
 }
-.stage video { z-index: 1; }
-.stage canvas { z-index: 2; touch-action: none; cursor: crosshair; }
+.stage video {
+    z-index: 1;
+}
+.stage canvas {
+    z-index: 2;
+    touch-action: none;
+    cursor: crosshair;
+}
 /* Sizer keeps the stage at the video's aspect ratio */
-.stage { aspect-ratio: 16 / 9; }
+.stage {
+    aspect-ratio: 16 / 9;
+}
 
 .export-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(13, 16, 23, 0.72);
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(13, 16, 23, 0.72);
 }
-.export-box { text-align: center; color: #fff; line-height: 1.4; }
+.export-box {
+    text-align: center;
+    color: #fff;
+    line-height: 1.4;
+}
 .progress {
-  margin-top: 12px;
-  width: 220px;
-  height: 8px;
-  background: rgba(255, 255, 255, 0.22);
-  border-radius: 999px;
-  overflow: hidden;
+    margin-top: 12px;
+    width: 220px;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+    overflow: hidden;
 }
-.progress-bar { height: 100%; width: 0%; background: #fff; transition: width 0.1s linear; }
+.progress-bar {
+    height: 100%;
+    width: 0%;
+    background: #fff;
+    transition: width 0.1s linear;
+}
 
 /* Timeline */
-.timeline-wrap { display: flex; flex-direction: column; gap: 6px; }
+.timeline-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
 .timeline {
-  position: relative;
-  height: 44px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  user-select: none;
-  touch-action: none;
+    position: relative;
+    height: 44px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    user-select: none;
+    touch-action: none;
 }
 .trim-region {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: rgba(47, 109, 246, 0.10);
-  border-left: 2px solid var(--accent);
-  border-right: 2px solid var(--accent);
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(47, 109, 246, 0.1);
+    border-left: 2px solid var(--accent);
+    border-right: 2px solid var(--accent);
 }
 .handle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 14px;
-  margin-left: -7px;
-  cursor: ew-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 14px;
+    margin-left: -7px;
+    cursor: ew-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .handle::after {
-  content: "";
-  width: 4px;
-  height: 22px;
-  border-radius: 3px;
-  background: var(--accent);
+    content: "";
+    width: 4px;
+    height: 22px;
+    border-radius: 3px;
+    background: var(--accent);
 }
 .playhead {
-  position: absolute;
-  top: -3px;
-  bottom: -3px;
-  width: 2px;
-  margin-left: -1px;
-  background: #1f2430;
-  pointer-events: none;
-  z-index: 4;
+    position: absolute;
+    top: -3px;
+    bottom: -3px;
+    width: 2px;
+    margin-left: -1px;
+    background: #1f2430;
+    pointer-events: none;
+    z-index: 4;
 }
 .playhead::before {
-  content: "";
-  position: absolute;
-  top: -4px;
-  left: -4px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #1f2430;
+    content: "";
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #1f2430;
 }
-.keyframes { position: absolute; inset: 0; pointer-events: none; }
+.keyframes {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
 .keyframe-dot {
-  position: absolute;
-  top: 50%;
-  width: 9px;
-  height: 9px;
-  margin: -4.5px 0 0 -4.5px;
-  border-radius: 50%;
-  background: #f5a623;
-  border: 1.5px solid #fff;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.08);
+    position: absolute;
+    top: 50%;
+    width: 9px;
+    height: 9px;
+    margin: -4.5px 0 0 -4.5px;
+    border-radius: 50%;
+    background: #f5a623;
+    border: 1.5px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 .time-readout {
-  display: flex;
-  justify-content: space-between;
-  color: var(--muted);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
 }
 
 /* Controls */
-.controls { display: flex; justify-content: center; align-items: center; gap: 12px; }
+.controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+}
 .btn.play,
 .btn.round {
-  border-radius: 50%;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+    border-radius: 50%;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
-.btn.play { width: 52px; height: 52px; font-size: 18px; }
-.btn.round { width: 44px; height: 44px; font-size: 15px; }
+.btn.play {
+    width: 52px;
+    height: 52px;
+    font-size: 18px;
+}
+.btn.round {
+    width: 44px;
+    height: 44px;
+    font-size: 15px;
+}
+.btn.round.small {
+    width: 38px;
+    height: 38px;
+}
+
+/* Icon buttons: one stroke style everywhere, coloured by the button's text. */
+.btn svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.btn.round.small svg {
+    width: 18px;
+    height: 18px;
+}
+.btn.tool.icon {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 
 /* Toolbar */
 .toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
 }
-.tool-group { display: flex; align-items: center; gap: 8px; }
-.swatches { gap: 6px; }
+.tool-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.swatches {
+    gap: 6px;
+}
 .swatch {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px var(--border);
-  cursor: pointer;
-  padding: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px var(--border);
+    cursor: pointer;
+    padding: 0;
 }
-.swatch.active { box-shadow: 0 0 0 2px var(--accent); }
-.sizes { border-left: 1px solid var(--border); padding-left: 16px; }
+.swatch.active {
+    box-shadow: 0 0 0 2px var(--accent);
+}
+.sizes {
+    border-left: 1px solid var(--border);
+    padding-left: 16px;
+}
 .size-btn {
-  font: inherit;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  cursor: pointer;
+    font: inherit;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
 }
-.size-btn.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-.btn.tool { padding: 8px 12px; }
-.btn.tool.active { border-color: var(--accent); color: var(--accent); }
+.size-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+}
+.btn.tool {
+    padding: 8px 12px;
+}
+.btn.tool.active {
+    border-color: var(--accent);
+    color: var(--accent);
+}
 
-.actions { display: flex; justify-content: flex-end; }
+.actions {
+    display: flex;
+    justify-content: flex-end;
+}
 
 @media (max-width: 560px) {
-  .toolbar { justify-content: center; }
-  .sizes { border-left: none; padding-left: 0; }
-  .actions { justify-content: stretch; }
-  .actions .btn { width: 100%; }
+    .toolbar {
+        justify-content: center;
+    }
+    .sizes {
+        border-left: none;
+        padding-left: 0;
+    }
+    .actions {
+        justify-content: stretch;
+    }
+    .actions .btn {
+        width: 100%;
+    }
 }
 
 /* Drawing and trimming swallow touch events, so on narrow screens keep a strip
-   down the right-hand side free for scrolling the page. */
+   free down both sides for scrolling the page. */
 @media (max-width: 760px) {
-  :root { --scroll-gutter: 68px; }
-  .stage,
-  .timeline-wrap {
-    /* width must be explicit: an auto margin cancels the flex stretch that
+    :root {
+        --scroll-gutter: 40px;
+    }
+    .stage,
+    .timeline-wrap {
+        /* width must be explicit: an auto margin cancels the flex stretch that
        would otherwise size these, collapsing them to their content. */
-    width: 100%;
-    max-width: min(var(--stage-max-w, 100%), calc(100% - var(--scroll-gutter)));
-    margin-left: 0;
-    margin-right: auto;
-  }
+        width: 100%;
+        max-width: min(
+            var(--stage-max-w, 100%),
+            calc(100% - var(--scroll-gutter) * 2)
+        );
+        margin-left: auto;
+        margin-right: auto;
+    }
 }

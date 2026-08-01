@@ -34,9 +34,27 @@
           <button class="size-btn" data-size="28">L</button>
         </div>
         <div class="tool-group">
-          <button id="eraserBtn" class="btn tool">Eraser</button>
-          <button id="undoBtn" class="btn tool">Undo</button>
-          <button id="clearBtn" class="btn tool">Clear</button>
+          <button id="eraserBtn" class="btn tool icon" title="Eraser" aria-label="Eraser">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8.5 20.5 3.9 15.9a2 2 0 0 1 0-2.8l8.6-8.6a2 2 0 0 1 2.8 0l4.6 4.6a2 2 0 0 1 0 2.8l-8.6 8.6z" />
+              <path d="M9 9.5 15.5 16" />
+              <path d="M9 20.5h11" />
+            </svg>
+          </button>
+          <button id="undoBtn" class="btn tool icon" title="Undo" aria-label="Undo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 9h9a5.5 5.5 0 0 1 0 11h-5" />
+              <path d="M8 4.5 3.5 9 8 13.5" />
+            </svg>
+          </button>
+          <button id="clearBtn" class="btn tool icon" title="Clear this drawing" aria-label="Clear this drawing">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6.5h16" />
+              <path d="M9.5 6.5V4h5v2.5" />
+              <path d="M6.5 6.5 7.6 20h8.8l1.1-13.5" />
+              <path d="M10 10v6M14 10v6" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -66,10 +84,30 @@
       </div>
 
       <div class="controls">
-        <button id="backBtn" class="btn round" aria-label="Back one second">⏪</button>
+        <button id="backSecBtn" class="btn round" title="Back 1 second" aria-label="Back one second">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M17.5 6 11.5 12l6 6" />
+            <path d="M11 6 5 12l6 6" />
+          </svg>
+        </button>
+        <button id="backFrameBtn" class="btn round small" title="Back a few frames" aria-label="Back a few frames">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M14.5 6 8.5 12l6 6" />
+          </svg>
+        </button>
         <button id="playBtn" class="btn play" aria-label="Play">▶</button>
-        <button id="stopBtn" class="btn round" aria-label="Stop">■</button>
-        <button id="fwdBtn" class="btn round" aria-label="Forward one second">⏩</button>
+        <button id="stopBtn" class="btn round" title="Stop" aria-label="Stop">■</button>
+        <button id="fwdFrameBtn" class="btn round small" title="Forward a few frames" aria-label="Forward a few frames">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9.5 6l6 6-6 6" />
+          </svg>
+        </button>
+        <button id="fwdSecBtn" class="btn round" title="Forward 1 second" aria-label="Forward one second">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6.5 6l6 6-6 6" />
+            <path d="M13 6l6 6-6 6" />
+          </svg>
+        </button>
       </div>
 
       <div class="actions">

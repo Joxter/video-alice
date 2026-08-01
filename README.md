@@ -15,16 +15,17 @@ no server, no account, and no analytics.
 - **Draw** — pause anywhere and doodle. Each doodle is pinned to that moment (an orange
   dot on the timeline) and stays on screen until the next doodle takes over. Eight colors,
   three brush sizes, eraser, undo, clear.
-- **Play** — play/pause, stop (back to the start of the trim), and skip a second
-  back or forward.
+- **Play** — play/pause and stop (back to the start of the trim). Double chevrons
+  jump a second; single chevrons nudge a few frames, for landing exactly on the
+  moment you want to draw over.
 - **Download** — get an MP4 with the trim and the doodles baked in.
 
-Shortcuts: <kbd>Space</kbd> to play/pause, <kbd>←</kbd> / <kbd>→</kbd> to skip a second,
-<kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd> to undo.
+Shortcuts: <kbd>Space</kbd> to play/pause, <kbd>←</kbd> / <kbd>→</kbd> to skip a second
+(hold <kbd>Shift</kbd> for a few frames), <kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd> to undo.
 
-On phones and narrow screens the video and timeline leave a strip free down the
-right-hand side, so you can still scroll the page — drawing and trimming otherwise
-swallow every touch.
+On phones and narrow screens the video and timeline leave a strip free down each
+side, so you can still scroll the page — drawing and trimming otherwise swallow
+every touch.
 
 ## Running it locally
 

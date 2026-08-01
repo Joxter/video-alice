@@ -46,8 +46,10 @@ const trimLabel = $('trimLabel');
 
 const playBtn = $('playBtn');
 const stopBtn = $('stopBtn');
-const backBtn = $('backBtn');
-const fwdBtn = $('fwdBtn');
+const backSecBtn = $('backSecBtn');
+const fwdSecBtn = $('fwdSecBtn');
+const backFrameBtn = $('backFrameBtn');
+const fwdFrameBtn = $('fwdFrameBtn');
 const swatchesEl = $('swatches');
 const sizesEl = $('sizes');
 const eraserBtn = $('eraserBtn');
@@ -63,7 +65,9 @@ const progressBar = $('progressBar');
 const COLORS = ['#e23b3b', '#f5a623', '#f7d038', '#3ba55d', '#2f6df6', '#8b5cf6', '#111111', '#ffffff'];
 const SNAP_SECONDS = 0.12; // draw within this of an existing keyframe -> edit it
 const MIN_TRIM = 0.2;      // keep at least this much between trim handles
-const SKIP_SECONDS = 1;    // how far the ⏪ / ⏩ buttons jump
+const SKIP_SECONDS = 1;    // the double-chevron jump
+const FRAME_SECONDS = 1 / 30; // no reliable frame rate in the DOM, so assume 30fps
+const SKIP_FRAMES = 3;     // the single-chevron nudge, for landing on a moment
 const MAX_STAGE_VH = 0.6;  // cap the stage height so tall clips still fit a phone screen
 
 // Codec preference order, best-looking first. Filtered per output format.
@@ -360,11 +364,17 @@ stopBtn.addEventListener('click', () => {
   seek(state.trimStart);
 });
 
-backBtn.addEventListener('click', () => skip(-SKIP_SECONDS));
-fwdBtn.addEventListener('click', () => skip(SKIP_SECONDS));
+const FRAME_STEP = FRAME_SECONDS * SKIP_FRAMES;
+backSecBtn.addEventListener('click', () => skip(-SKIP_SECONDS));
+fwdSecBtn.addEventListener('click', () => skip(SKIP_SECONDS));
+backFrameBtn.addEventListener('click', () => skip(-FRAME_STEP));
+fwdFrameBtn.addEventListener('click', () => skip(FRAME_STEP));
 
+// Stepping is for lining up a doodle, so it pauses first — otherwise playback
+// runs straight past the frame you were aiming for.
 function skip(delta) {
   if (state.exporting) return;
+  if (!video.paused) { video.pause(); setPlayIcon(false); }
   seek(clamp(video.currentTime + delta, state.trimStart, state.trimEnd));
 }
 
@@ -476,8 +486,9 @@ function seek(t) {
 window.addEventListener('keydown', (e) => {
   if (editorScreen.classList.contains('hidden') || state.exporting) return;
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
-  if (e.code === 'ArrowLeft') { e.preventDefault(); skip(-SKIP_SECONDS); }
-  if (e.code === 'ArrowRight') { e.preventDefault(); skip(SKIP_SECONDS); }
+  // Shift narrows the jump to a few frames, matching the single chevrons.
+  if (e.code === 'ArrowLeft') { e.preventDefault(); skip(e.shiftKey ? -FRAME_STEP : -SKIP_SECONDS); }
+  if (e.code === 'ArrowRight') { e.preventDefault(); skip(e.shiftKey ? FRAME_STEP : SKIP_SECONDS); }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoBtn.click(); }
 });
 
@@ -797,7 +808,8 @@ function downloadBlob(blob, filename) {
 }
 
 function setUIDisabled(disabled) {
-  [playBtn, stopBtn, backBtn, fwdBtn, undoBtn, clearBtn, eraserBtn, downloadBtn, newBtn]
+  [playBtn, stopBtn, backSecBtn, fwdSecBtn, backFrameBtn, fwdFrameBtn,
+    undoBtn, clearBtn, eraserBtn, downloadBtn, newBtn]
     .forEach((b) => (b.disabled = disabled));
   canvas.style.pointerEvents = disabled ? 'none' : '';
 }
