@@ -372,11 +372,12 @@ backFrameBtn.addEventListener('click', () => skip(-FRAME_STEP));
 fwdFrameBtn.addEventListener('click', () => skip(FRAME_STEP));
 
 // Stepping is for lining up a doodle, so it pauses first — otherwise playback
-// runs straight past the frame you were aiming for.
+// runs straight past the frame you were aiming for. It ranges over the whole
+// clip: you may want to draw just outside the trim, or check what you cut.
 function skip(delta) {
   if (state.exporting) return;
   if (!video.paused) { video.pause(); setPlayIcon(false); }
-  seek(clamp(video.currentTime + delta, state.trimStart, state.trimEnd));
+  seek(video.currentTime + delta);
 }
 
 function setPlayIcon(playing) {
@@ -461,17 +462,17 @@ timeline.addEventListener('pointerdown', (e) => {
 function handleDrag(e) {
   if (!dragTarget) return;
   const t = timeFromEvent(e);
+  // Moving a handle no longer drags the playhead along: sitting outside the
+  // trim is allowed now.
   if (dragTarget === 'start') {
     state.trimStart = clamp(t, 0, state.trimEnd - MIN_TRIM);
-    if (video.currentTime < state.trimStart) seek(state.trimStart);
     renderTimeline();
   } else if (dragTarget === 'end') {
     state.trimEnd = clamp(t, state.trimStart + MIN_TRIM, state.duration);
-    if (video.currentTime > state.trimEnd) seek(state.trimEnd);
     renderTimeline();
   } else if (dragTarget === 'seek') {
     if (!video.paused) { video.pause(); setPlayIcon(false); }
-    seek(clamp(t, state.trimStart, state.trimEnd));
+    seek(t);
   }
 }
 timeline.addEventListener('pointermove', handleDrag);
