@@ -42,7 +42,6 @@ const playhead = $('playhead');
 const handleStart = $('handleStart');
 const handleEnd = $('handleEnd');
 const timeLabel = $('timeLabel');
-const trimLabel = $('trimLabel');
 
 const playBtn = $('playBtn');
 const stopBtn = $('stopBtn');
@@ -419,9 +418,6 @@ function renderTimeline() {
   trimRegion.style.width = `${endPct - startPct}%`;
   handleStart.style.left = `${startPct}%`;
   handleEnd.style.left = `${endPct}%`;
-  const length = Math.max(0, state.trimEnd - state.trimStart);
-  trimLabel.textContent =
-    `Trim ${fmtTime(state.trimStart)} – ${fmtTime(state.trimEnd)} · ${length.toFixed(2)}s`;
 }
 
 function renderKeyframes() {
