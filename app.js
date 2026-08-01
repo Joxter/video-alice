@@ -89,11 +89,13 @@ const state = {
 };
 
 // ---------- Helpers ----------
+// Hundredths of a second: a few-frame step is ~0.1s, which has to be legible in
+// the readout or the buttons feel like they did nothing.
 function fmtTime(t) {
-  if (!isFinite(t)) t = 0;
+  if (!isFinite(t) || t < 0) t = 0;
   const m = Math.floor(t / 60);
-  const s = Math.floor(t % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
+  const s = t % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s.toFixed(2)}`;
 }
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -417,7 +419,9 @@ function renderTimeline() {
   trimRegion.style.width = `${endPct - startPct}%`;
   handleStart.style.left = `${startPct}%`;
   handleEnd.style.left = `${endPct}%`;
-  trimLabel.textContent = `Trim: ${fmtTime(state.trimStart)} – ${fmtTime(state.trimEnd)}`;
+  const length = Math.max(0, state.trimEnd - state.trimStart);
+  trimLabel.textContent =
+    `Trim ${fmtTime(state.trimStart)} – ${fmtTime(state.trimEnd)} · ${length.toFixed(2)}s`;
 }
 
 function renderKeyframes() {
