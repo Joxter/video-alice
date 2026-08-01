@@ -694,7 +694,7 @@ async function exportWithWebCodecs() {
 
   progressBar.style.width = '100%';
   const blob = new Blob([target.buffer], { type: format.mimeType });
-  downloadBlob(blob, `video-alice.${format.fileExtension.replace(/^\./, '')}`);
+  downloadBlob(blob, exportFileName(format.fileExtension.replace(/^\./, '')));
 }
 
 // ---------- Fallback export (Safari / iPad) ----------
@@ -816,7 +816,7 @@ async function exportWithRecorder() {
 
   progressBar.style.width = '100%';
   const ext = (mime || '').includes('mp4') ? 'mp4' : 'webm';
-  downloadBlob(blob, `video-alice.${ext}`);
+  downloadBlob(blob, exportFileName(ext));
   seek(trimStart);
 }
 
@@ -827,6 +827,16 @@ function seekAndWait(t) {
     video.addEventListener('seeked', onSeeked);
     video.currentTime = t;
   });
+}
+
+// e.g. alice-video_2026-08-01_7s.mp4 — the duration is the trimmed length, so
+// the name describes the file you actually got.
+function exportFileName(ext) {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const seconds = Math.max(1, Math.round(state.trimEnd - state.trimStart));
+  return `alice-video_${date}_${seconds}s.${ext}`;
 }
 
 function downloadBlob(blob, filename) {
