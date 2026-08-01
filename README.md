@@ -24,16 +24,32 @@ no server, no account, and no analytics.
   screen at a time — the most recent one at or before the playhead — so starting a new
   doodle is how you make the previous one go away, and the eraser is for tidying the
   drawing you are on, not the one it inherited. To change an existing doodle, jump back
-  to its own dot with the orange-dot buttons; drawing a moment later starts a new one.
+  to its own dot with the orange-dot buttons; drawing a step later starts a new one.
 - **Play** — play/pause and stop (back to the start of the trim). Double chevrons
-  jump a second; single chevrons nudge a few frames, for landing exactly on the
-  moment you want to draw over. The outer buttons, marked with an orange dot, hop
-  straight between the moments that already have a drawing.
+  jump a second, single chevrons one step. The outer buttons, marked with an orange
+  dot, hop straight between the moments that already have a drawing.
 - **Download** — get an MP4 with the trim and the doodles baked in, named for the day
   and the clip's length: `alice-video_2026-08-01_7s.mp4`.
 
 Shortcuts: <kbd>Space</kbd> to play/pause, <kbd>←</kbd> / <kbd>→</kbd> to skip a second
-(hold <kbd>Shift</kbd> for a few frames), <kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd> to undo.
+(hold <kbd>Shift</kbd> for one step), <kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd> to undo.
+
+### The step grid
+
+The playhead only ever stops on a tenth of a second. Every button moves by whole steps,
+a click on the timeline goes to the nearest one, and a doodle belongs to a step rather
+than to a video frame. The shaded band under the playhead is the step you're on, and the
+dot of a doodle already there lights up, so it's clear which moment you're drawing at
+before the brush touches anything.
+
+This is a deliberate limit, and it's what keeps the editor honest: "is this doodle on the
+same moment as the playhead?" becomes a comparison of two whole numbers. Ask a `<video>`
+element where it is and the answer drifts by milliseconds — a seek reports the position
+you asked for, then settles on whichever frame actually decoded — which used to be enough
+to strand a fresh drawing a hair ahead of the playhead, invisible until playback caught up.
+
+Playback and the exported file are untouched by any of this. Those are as smooth as the
+source; it's only where you can *stop* that is quantised.
 
 On a touch screen, one finger on the video draws and two fingers scroll the page.
 The video and timeline also leave a strip free down each side on narrow screens,

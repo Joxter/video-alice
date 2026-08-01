@@ -38,6 +38,7 @@ const timeline = $('timeline');
 const trimRegion = $('trimRegion');
 const keyframesEl = $('keyframes');
 const playhead = $('playhead');
+const stepSlot = $('stepSlot');
 const handleStart = $('handleStart');
 const handleEnd = $('handleEnd');
 const timeLabel = $('timeLabel');
@@ -66,11 +67,16 @@ const COLORS = [
   '#e23b3b', '#f5a623', '#f7d038', '#3ba55d', '#2f6df6', '#8b5cf6',
   '#8b5e34', '#9aa1ab', '#111111', '#ffffff',
 ];
-const SNAP_SECONDS = 0.12; // draw within this of an existing keyframe -> edit it
+// The playhead only ever stops on a tenth of a second. Buttons move by whole
+// steps, a click on the timeline goes to the nearest one, and a doodle belongs
+// to a step rather than to a video frame — so "am I on the same moment as that
+// drawing?" is an integer comparison and can't come out a millisecond wrong.
+// Playback and the exported file are untouched: those stay as smooth as the
+// source. Change this one number to make the grid coarser.
+const TIME_STEP = 0.1;
+const STEP_JUMP = Math.round(1 / TIME_STEP); // the double-chevron: one second
+
 const MIN_TRIM = 0.2;      // keep at least this much between trim handles
-const SKIP_SECONDS = 1;    // the double-chevron jump
-const FRAME_SECONDS = 1 / 30; // no reliable frame rate in the DOM, so assume 30fps
-const SKIP_FRAMES = 3;     // the single-chevron nudge, for landing on a moment
 
 // The preview canvas is never drawn wider than the 820px page — call it 1600
 // device pixels on a retina screen — so a 4K frame is four fifths wasted. Every
@@ -87,10 +93,12 @@ const AUDIO_CODECS = ['aac', 'opus'];
 const state = {
   file: null,   // the original File — mediabunny decodes from this, not the <video>
   source: { width: 0, height: 0 }, // the video's own size; the export goes out at this
+  step: 0,      // where the playhead is, in TIME_STEPs — see seek()
+  lastStep: 0,  // the last step that still lands inside the video
   duration: 0,
   trimStart: 0,
   trimEnd: 0,
-  layers: [],   // { time, canvas, ctx, strokes:[{color,size,eraser,points:[{x,y}]}] }
+  layers: [],   // { step, canvas, ctx, strokes:[{color,size,eraser,points:[{x,y}]}] }
   tool: { color: COLORS[0], size: 14, eraser: false },
   drawing: null, // { layer, stroke }
   panning: false, // two or more fingers on the canvas: scrolling, not drawing
@@ -100,17 +108,41 @@ const state = {
 };
 
 // ---------- Helpers ----------
-// Hundredths of a second: a few-frame step is ~0.1s, which has to be legible in
-// the readout or the buttons feel like they did nothing.
+// Tenths, because that's the grid — showing hundredths would suggest a precision
+// the playhead doesn't have.
 function fmtTime(t) {
   if (!isFinite(t) || t < 0) t = 0;
-  // Round before splitting, or 59.999s formats as 0:60.00.
-  const cs = Math.round(t * 100);
-  const m = Math.floor(cs / 6000);
-  const s = (cs - m * 6000) / 100;
-  return `${m}:${s < 10 ? '0' : ''}${s.toFixed(2)}`;
+  // Round before splitting, or 59.99s formats as 0:60.0.
+  const tenths = Math.round(t * 10);
+  const m = Math.floor(tenths / 600);
+  const s = (tenths - m * 600) / 10;
+  return `${m}:${s < 10 ? '0' : ''}${s.toFixed(1)}`;
 }
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// ---------- Where the playhead is ----------
+// state.step is the app's own answer to that, and everything reads it: which
+// doodle is on screen, which one a new stroke joins, the marker, the readout.
+//
+// The <video> can't be that answer. Ask it mid-seek and it reports the position
+// you asked for; once the seek lands it reports the frame it actually decoded,
+// which can be a few tens of milliseconds earlier. Two doodles a few
+// milliseconds apart, one of them invisible, followed from that. Steps are whole
+// numbers, so there is no "a few milliseconds apart" to get wrong.
+const timeOf = (step) => step * TIME_STEP;
+const stepAt = (t) => clamp(Math.round(t / TIME_STEP), 0, state.lastStep);
+
+function seek(step) {
+  state.step = clamp(Math.round(step), 0, state.lastStep);
+  video.currentTime = timeOf(state.step);
+}
+
+// Playback stops wherever it happens to be, which is usually between two steps.
+// Snap onto the grid so the picture, the marker and the doodle all agree — this
+// is the only place the video stops without someone asking for a step.
+video.addEventListener('pause', () => {
+  if (!state.exporting) seek(state.step);
+});
 
 // ---------- Upload ----------
 pickBtn.addEventListener('click', () => fileInput.click());
@@ -151,14 +183,16 @@ function setupVideo() {
   const shrink = Math.min(1, PREVIEW_MAX / Math.max(1, video.videoWidth, video.videoHeight));
   canvas.width = Math.max(1, Math.round(video.videoWidth * shrink));
   canvas.height = Math.max(1, Math.round(video.videoHeight * shrink));
+  frame.width = canvas.width;   // also clears the previous video's last frame
+  frame.height = canvas.height;
   stage.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
 
   editorScreen.classList.remove('empty');
   newBtn.classList.remove('hidden');
   setUIDisabled(false);
 
-  video.currentTime = 0;
-  shownTime = -1;
+  seek(0);
+  shownStep = -1;
   renderKeyframes();
   setPlayIcon(false);
 
@@ -171,7 +205,11 @@ function setupVideo() {
 function setDuration(seconds) {
   state.duration = seconds;
   state.trimEnd = seconds;
+  // Floor, so the last step is a moment the video actually has.
+  state.lastStep = Math.max(0, Math.floor(seconds / TIME_STEP));
+  shownTime = -1; // the grid just changed scale, so redraw the marker and the slot
   renderTimeline();
+  renderStepSlot();
 }
 
 // Anything MediaRecorder produced — including this app's own fallback export —
@@ -202,6 +240,7 @@ function resetApp() {
   state.layers = [];
   state.file = null;
   state.source = { width: 0, height: 0 };
+  state.step = 0;
   state.trimStart = 0;
   setDuration(0);
   fileInput.value = '';
@@ -215,20 +254,24 @@ function resetApp() {
 }
 
 // ---------- Layers (doodle keyframes) ----------
-// A layer replaces the one before it rather than adding to it: what you see at
-// time t is exactly one layer, the newest one at or before t. So a fresh
-// keyframe starts blank, and drawing anything at t clears whatever an earlier
-// keyframe was still showing there. That's the intended feel — a doodle lasts
-// until the next one, and starting a new one is how you make the old one go.
-// Reworking an existing doodle means going back to its own dot (the jump
-// buttons are there for that) rather than drawing a moment later.
-function createLayer(time) {
+// A doodle belongs to a step, not to a video frame. Nothing here needs to know
+// what the video's frame rate is, or which frame the decoder happened to land
+// on — two doodles are either on the same step or they aren't.
+//
+// A layer replaces the one before it rather than adding to it: what you see at a
+// step is exactly one layer, the newest one at or before it. So a fresh keyframe
+// starts blank, and drawing anything clears whatever an earlier keyframe was
+// still showing there. That's the intended feel — a doodle lasts until the next
+// one, and starting a new one is how you make the old one go. Reworking an
+// existing doodle means going back to its own dot (the jump buttons are there
+// for that) rather than drawing a step later.
+function createLayer(step) {
   const c = document.createElement('canvas');
   c.width = canvas.width;
   c.height = canvas.height;
-  const layer = { time, canvas: c, ctx: c.getContext('2d'), strokes: [] };
+  const layer = { step, canvas: c, ctx: c.getContext('2d'), strokes: [] };
   state.layers.push(layer);
-  state.layers.sort((a, b) => a.time - b.time);
+  state.layers.sort((a, b) => a.step - b.step);
   renderKeyframes();
   return layer;
 }
@@ -239,22 +282,18 @@ function removeLayer(layer) {
   renderKeyframes();
 }
 
-// Layer shown at time t = most recent keyframe at or before t.
-function activeLayerAt(t) {
+// Layer shown at a step = the newest keyframe at or before it.
+function activeLayerAt(step) {
   let best = null;
   for (const l of state.layers) {
-    if (l.time <= t + 1e-3 && (!best || l.time > best.time)) best = l;
+    if (l.step <= step && (!best || l.step > best.step)) best = l;
   }
   return best;
 }
 
-// Layer to draw onto right now: reuse a nearby keyframe, else make a new one.
-// Only ever snap backwards — a keyframe just ahead of the playhead isn't the one
-// on screen, so drawing into it would look like the brush did nothing.
+// The layer a new stroke joins: the one on this exact step, or a new one.
 function layerForDrawing() {
-  const t = video.currentTime;
-  const shown = activeLayerAt(t);
-  return shown && t - shown.time < SNAP_SECONDS ? shown : createLayer(t);
+  return state.layers.find((l) => l.step === state.step) || createLayer(state.step);
 }
 
 // ---------- Stroke drawing ----------
@@ -436,7 +475,7 @@ canvas.addEventListener('pointercancel', endPointer);
 
 // ---------- Undo / Clear ----------
 undoBtn.addEventListener('click', () => {
-  const layer = activeLayerAt(video.currentTime);
+  const layer = activeLayerAt(state.step);
   if (!layer || !layer.strokes.length) return;
   layer.strokes.pop();
   redrawLayer(layer);
@@ -444,7 +483,7 @@ undoBtn.addEventListener('click', () => {
 });
 
 clearBtn.addEventListener('click', () => {
-  const layer = activeLayerAt(video.currentTime);
+  const layer = activeLayerAt(state.step);
   if (layer) removeLayer(layer);
 });
 
@@ -480,8 +519,9 @@ playBtn.addEventListener('click', togglePlay);
 function togglePlay() {
   if (state.exporting) return;
   if (video.paused) {
-    if (video.currentTime < state.trimStart || video.currentTime >= state.trimEnd - 1e-3) {
-      video.currentTime = state.trimStart;
+    const now = timeOf(state.step);
+    if (now < state.trimStart || now >= state.trimEnd - TIME_STEP / 2) {
+      seek(stepAt(state.trimStart));
     }
     video.play();
     setPlayIcon(true);
@@ -495,51 +535,44 @@ stopBtn.addEventListener('click', () => {
   if (state.exporting) return;
   video.pause();
   setPlayIcon(false);
-  seek(state.trimStart);
+  seek(stepAt(state.trimStart));
 });
 
-const FRAME_STEP = FRAME_SECONDS * SKIP_FRAMES;
-backSecBtn.addEventListener('click', () => skip(-SKIP_SECONDS));
-fwdSecBtn.addEventListener('click', () => skip(SKIP_SECONDS));
-backFrameBtn.addEventListener('click', () => skip(-FRAME_STEP));
-fwdFrameBtn.addEventListener('click', () => skip(FRAME_STEP));
+backSecBtn.addEventListener('click', () => skip(-STEP_JUMP));
+fwdSecBtn.addEventListener('click', () => skip(STEP_JUMP));
+backFrameBtn.addEventListener('click', () => skip(-1));
+fwdFrameBtn.addEventListener('click', () => skip(1));
 
 // Hop between the moments that carry a doodle — the orange dots on the timeline.
 prevDrawBtn.addEventListener('click', () => jumpToDrawing(-1));
 nextDrawBtn.addEventListener('click', () => jumpToDrawing(1));
 
+// state.layers is kept in step order, so the next doodle either way is just the
+// neighbour — no epsilons needed to avoid landing back on the one we left.
 function jumpToDrawing(direction) {
   if (state.exporting) return;
-  const now = video.currentTime;
-  let target = null;
-  for (const layer of state.layers) {
-    // The epsilon stops a jump landing on the doodle we just left.
-    if (direction < 0 ? layer.time < now - 0.05 : layer.time > now + 0.05) {
-      if (target === null || (direction < 0 ? layer.time > target : layer.time < target)) {
-        target = layer.time;
-      }
-    }
-  }
-  if (target === null) return;
+  const target = direction < 0
+    ? state.layers.filter((l) => l.step < state.step).pop()
+    : state.layers.find((l) => l.step > state.step);
+  if (!target) return;
   if (!video.paused) { video.pause(); setPlayIcon(false); }
-  seek(target);
+  seek(target.step);
 }
 
 // Nothing to jump to until there are doodles either side of the playhead.
 function updateDrawNav() {
   if (state.exporting) return;
-  const now = video.currentTime;
-  prevDrawBtn.disabled = !state.layers.some((l) => l.time < now - 0.05);
-  nextDrawBtn.disabled = !state.layers.some((l) => l.time > now + 0.05);
+  prevDrawBtn.disabled = !state.layers.some((l) => l.step < state.step);
+  nextDrawBtn.disabled = !state.layers.some((l) => l.step > state.step);
 }
 
 // Stepping is for lining up a doodle, so it pauses first — otherwise playback
-// runs straight past the frame you were aiming for. It ranges over the whole
+// runs straight past the moment you were aiming for. It ranges over the whole
 // clip: you may want to draw just outside the trim, or check what you cut.
-function skip(delta) {
+function skip(steps) {
   if (state.exporting) return;
   if (!video.paused) { video.pause(); setPlayIcon(false); }
-  seek(video.currentTime + delta);
+  seek(state.step + steps);
 }
 
 function setPlayIcon(playing) {
@@ -548,6 +581,11 @@ function setPlayIcon(playing) {
 }
 
 // ---------- Render loop ----------
+// The last decoded video frame, kept apart from the doodle so the two can be
+// recomposited at any moment. Preview-sized, like the layers.
+const frame = document.createElement('canvas');
+const frameCtx = frame.getContext('2d');
+
 function renderLoop() {
   // The export overlay covers the stage, and both export paths composite onto
   // their own canvas — so there is nothing to keep repainting here.
@@ -556,16 +594,32 @@ function renderLoop() {
     return;
   }
 
-  if (video.readyState >= 2 && canvas.width) {
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const layer = activeLayerAt(video.currentTime);
+  // While playing, the element is the one moving, so follow it. Floor rather
+  // than round: a doodle comes up when playback reaches its step, not half a
+  // step early. Every other way of getting somewhere goes through seek().
+  if (!video.paused) {
+    state.step = clamp(Math.floor(video.currentTime / TIME_STEP), 0, state.lastStep);
+  }
+
+  if (canvas.width) {
+    // The <video> refuses to draw while a seek is still fetching its frame. Keep
+    // the last frame that did arrive in a buffer of its own and composite from
+    // that, so a stroke drawn mid-seek still shows up instead of the stage
+    // sitting on a stale picture until playback repaints it.
+    if (video.readyState >= 2) {
+      frameCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // the buffer is empty until the first frame
+    ctx.drawImage(frame, 0, 0);
+    const layer = activeLayerAt(state.step);
     if (layer) ctx.drawImage(layer.canvas, 0, 0);
   }
 
-  // Stop preview playback at the trim end.
+  // Stop preview playback at the trim end. Straight off the element: the trim
+  // handles aren't on the grid, so this is a question about real time.
   if (!video.paused && video.currentTime >= state.trimEnd - 1e-3) {
     video.pause();
-    video.currentTime = state.trimEnd;
+    seek(stepAt(state.trimEnd));
     setPlayIcon(false);
   }
 
@@ -573,15 +627,37 @@ function renderLoop() {
   requestAnimationFrame(renderLoop);
 }
 
-// Called every frame, so skip the DOM writes while the playhead sits still —
-// which is most of the time in an editor like this.
+// Called every frame, so skip the DOM writes while nothing moves — which is most
+// of the time in an editor like this. The marker follows the video itself during
+// playback, so that stays as smooth as the picture; the moment it stops, it's
+// back on the grid.
+let shownStep = -1;
 let shownTime = -1;
 function updatePlayhead() {
-  if (!state.duration || video.currentTime === shownTime) return;
-  shownTime = video.currentTime;
-  playhead.style.left = `${(shownTime / state.duration) * 100}%`;
-  timeLabel.textContent = fmtTime(shownTime);
-  updateDrawNav();
+  if (!state.duration) return;
+  const t = video.paused ? timeOf(state.step) : video.currentTime;
+  if (t === shownTime && state.step === shownStep) return;
+  shownTime = t;
+  playhead.style.left = `${(t / state.duration) * 100}%`;
+  timeLabel.textContent = fmtTime(t);
+
+  if (state.step !== shownStep) {
+    shownStep = state.step;
+    renderStepSlot();
+    updateDrawNav();
+  }
+}
+
+// The band the playhead is standing in — one step wide, so it's clear which
+// moment a stroke would belong to. The dot of a doodle already on this step
+// lights up with it.
+function renderStepSlot() {
+  const d = state.duration || 1;
+  stepSlot.style.left = `${((timeOf(state.step) - TIME_STEP / 2) / d) * 100}%`;
+  stepSlot.style.width = `${(TIME_STEP / d) * 100}%`;
+  for (const dot of keyframeDots) {
+    dot.el.classList.toggle('current', dot.step === state.step);
+  }
 }
 
 // ---------- Timeline ----------
@@ -595,15 +671,18 @@ function renderTimeline() {
   handleEnd.style.left = `${endPct}%`;
 }
 
+let keyframeDots = [];
 function renderKeyframes() {
   const d = state.duration || 1;
   keyframesEl.innerHTML = '';
-  for (const l of state.layers) {
-    const dot = document.createElement('div');
-    dot.className = 'keyframe-dot';
-    dot.style.left = `${(l.time / d) * 100}%`;
-    keyframesEl.appendChild(dot);
-  }
+  keyframeDots = state.layers.map((l) => {
+    const el = document.createElement('div');
+    el.className = 'keyframe-dot';
+    el.style.left = `${(timeOf(l.step) / d) * 100}%`;
+    keyframesEl.appendChild(el);
+    return { step: l.step, el };
+  });
+  renderStepSlot();
   updateDrawNav(); // the dots and the jump buttons describe the same set
 }
 
@@ -647,16 +726,13 @@ function handleDrag(e) {
     renderTimeline();
   } else if (dragTarget === 'seek') {
     if (!video.paused) { video.pause(); setPlayIcon(false); }
-    seek(t);
+    seek(stepAt(t)); // the nearest point on the grid, not wherever the finger was
   }
 }
 timeline.addEventListener('pointermove', handleDrag);
 timeline.addEventListener('pointerup', () => { dragTarget = null; });
 timeline.addEventListener('pointercancel', () => { dragTarget = null; });
 
-function seek(t) {
-  video.currentTime = clamp(t, 0, state.duration);
-}
 
 // ---------- Keyboard niceties ----------
 window.addEventListener('keydown', (e) => {
@@ -665,8 +741,8 @@ window.addEventListener('keydown', (e) => {
   // or clicking Play once and then pressing Space toggles playback twice.
   if (e.code === 'Space' && !e.target.closest?.('button')) { e.preventDefault(); togglePlay(); }
   // Shift narrows the jump to a few frames, matching the single chevrons.
-  if (e.code === 'ArrowLeft') { e.preventDefault(); skip(e.shiftKey ? -FRAME_STEP : -SKIP_SECONDS); }
-  if (e.code === 'ArrowRight') { e.preventDefault(); skip(e.shiftKey ? FRAME_STEP : SKIP_SECONDS); }
+  if (e.code === 'ArrowLeft') { e.preventDefault(); skip(e.shiftKey ? -1 : -STEP_JUMP); }
+  if (e.code === 'ArrowRight') { e.preventDefault(); skip(e.shiftKey ? 1 : STEP_JUMP); }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoBtn.click(); }
 });
 
@@ -805,7 +881,9 @@ async function exportWithWebCodecs() {
       outCtx.clearRect(0, 0, width, height);
       sample.draw(outCtx, 0, 0, width, height);
 
-      const doodle = rasterize(activeLayerAt(sample.timestamp));
+      // Frames are continuous, doodles are on the grid: a decoded frame carries
+      // whichever doodle its moment has reached. Same rule the preview uses.
+      const doodle = rasterize(activeLayerAt(Math.floor(sample.timestamp / TIME_STEP)));
       if (doodle) outCtx.drawImage(doodle, 0, 0);
 
       // Shift onto the trimmed timeline, and never let the last frame spill
@@ -897,6 +975,9 @@ async function exportWithRecorder() {
 
   let painting = 0;
   const paint = () => {
+    // The preview loop is parked for the duration of the export, so this one
+    // keeps state.step following playback in its place.
+    state.step = clamp(Math.floor(video.currentTime / TIME_STEP), 0, state.lastStep);
     outCtx.fillStyle = '#000';
     outCtx.fillRect(0, 0, out.width, out.height);
     if (video.readyState >= 2) {
@@ -906,7 +987,7 @@ async function exportWithRecorder() {
         console.warn('Could not draw the video frame:', err);
       }
     }
-    const doodle = rasterize(activeLayerAt(video.currentTime));
+    const doodle = rasterize(activeLayerAt(state.step));
     if (doodle) outCtx.drawImage(doodle, 0, 0);
     painting = requestAnimationFrame(paint);
   };
@@ -938,6 +1019,8 @@ async function exportWithRecorder() {
       if (rec.state !== 'inactive') rec.stop();
     };
 
+    // Straight off the element on purpose: a backgrounded tab stops rAF, and
+    // this has to keep measuring the recording that's still running.
     const tick = () => {
       const p = clamp((video.currentTime - trimStart) / span, 0, 1);
       progressBar.style.width = `${p * 100}%`;
@@ -958,14 +1041,18 @@ async function exportWithRecorder() {
   progressBar.style.width = '100%';
   const ext = (mime || '').includes('mp4') ? 'mp4' : 'webm';
   downloadBlob(blob, exportFileName(ext));
-  seek(trimStart);
+  seek(stepAt(trimStart));
 }
 
+// Real seconds rather than a step, because the recording has to start exactly
+// where the trim does — the handles aren't on the grid. state.step follows along
+// so the doodles still come up on the right moments.
 function seekAndWait(t) {
   return new Promise((resolve) => {
     if (Math.abs(video.currentTime - t) < 1e-3) return resolve();
     const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve(); };
     video.addEventListener('seeked', onSeeked);
+    state.step = clamp(Math.floor(t / TIME_STEP), 0, state.lastStep);
     video.currentTime = t;
   });
 }

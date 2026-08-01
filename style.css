@@ -276,6 +276,16 @@ main {
     border-radius: 3px;
     background: var(--accent);
 }
+/* The step the playhead is on. The playhead can only stop on the grid, so this
+   band is where a new doodle would go — worth seeing before you draw. */
+.step-slot {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    min-width: 4px;
+    border-radius: 4px;
+    background: rgba(31, 36, 48, 0.1);
+}
 .playhead {
     position: absolute;
     top: -3px;
@@ -311,6 +321,12 @@ main {
     background: #f5a623;
     border: 1.5px solid #fff;
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+    transition: transform 0.1s;
+}
+/* The doodle you are standing on — the one the brush, undo and clear all act on. */
+.keyframe-dot.current {
+    transform: scale(1.5);
+    box-shadow: 0 0 0 2px var(--accent);
 }
 .time-readout {
     display: flex;
