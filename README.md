@@ -2,11 +2,11 @@
 
 A tiny video editor for short clips, simple enough for kids. Upload a video, trim
 the ends, doodle on top, download the result. Pictures work too: drop one in and
-the same brushes mark it up.
+the same tools mark it up.
 
 **[Try it →](https://joxter.github.io/video-alice/)**
 
-Everything runs in your browser. Your video is never uploaded anywhere — there is
+Everything runs in your browser. Your file is never uploaded anywhere — there is
 no server, no account, and no analytics. The only thing kept between visits is your
 drawings, in this browser's own local storage.
 
@@ -57,18 +57,6 @@ Shortcuts: <kbd>Space</kbd> to play/pause, <kbd>←</kbd> / <kbd>→</kbd> to sk
 (hold <kbd>Shift</kbd> for one step), <kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd> to undo, and
 <kbd>⌘V</kbd> to bring in a new file. While you're typing, every key is just a key.
 
-## Pictures
-
-Drop in — or paste — a PNG or a JPEG instead of a video and the editor turns into a
-still one: the timeline and the playback buttons go away, since there's only one moment
-to stand on, and the toolbar, the tools, undo and clear are exactly as they were.
-Download gives you a PNG at the picture's own resolution, `alice-image_2026-08-01.png`.
-
-Nothing about the drawing side needed changing for this. A doodle belongs to a step on
-the grid, and a picture is a clip with a single step on it — so the code that decides
-which doodle is on screen, which one a stroke or a text joins, and how both are
-re-rendered at full resolution for the export is the same code either way.
-
 ### The step grid
 
 The playhead only ever stops on a tenth of a second. Every button moves by whole steps,
@@ -90,6 +78,18 @@ On a touch screen the video and the timeline swallow every touch that lands on
 them — that's what makes the brush and the trim handles work — so the editor keeps
 a 48px strip free down both sides to scroll the page by. The jump buttons sit in
 that strip beside the track and are fine to scroll over.
+
+## Pictures
+
+Drop in — or paste — a PNG or a JPEG instead of a video and the editor turns into a
+still one: the timeline and the playback buttons go away, since there's only one moment
+to stand on, and the toolbar, the tools, undo and clear are exactly as they were.
+Download gives you a PNG at the picture's own resolution, `alice-image_2026-08-01.png`.
+
+Nothing about the drawing side needed changing for this. A doodle belongs to a step on
+the grid, and a picture is a clip with a single step on it — so the code that decides
+which doodle is on screen, which one a stroke or a text joins, and how both are
+re-rendered at full resolution for the export is the same code either way.
 
 ## Running it locally
 
@@ -125,11 +125,10 @@ but instead of the `<video>` element, frames come from
 1. `VideoSampleSink.samples(trimStart, trimEnd)` yields exactly the frames inside the trim.
 2. Each frame is drawn to an offscreen canvas at the video's own resolution, and the
    doodle for that frame's timestamp is drawn on top. The doodle is re-rendered from
-   its items at that resolution rather than scaled up from the preview — strokes and
-   letters alike come out sharp, not enlarged: on screen
-   the drawing layers are capped at 1600px, since that's more than the page can show
-   and a full-size layer per doodle is what makes a 4K clip expensive to keep in
-   memory.
+   its items at that resolution rather than scaled up from the preview, so strokes and
+   letters alike come out sharp rather than enlarged. On screen the drawing layers are
+   capped at 1600px, since that's more than the page can show, and a full-size layer
+   per doodle is what makes a 4K clip expensive to keep in memory.
 3. `CanvasSource` encodes the composited canvas; audio is decoded and re-encoded in
    parallel, with timestamps shifted onto the trimmed timeline so it stays in sync.
 4. The muxed result downloads as an MP4.
@@ -166,7 +165,7 @@ src/clip.js     the file being edited and where we are in it — video or pictur
 src/doodles.js  the drawings, one per moment, and their storage
 src/render.js   items to pixels; knows nothing about the app
 src/stage.js    the preview canvas and everything a pointer does to it
-src/textentry.js  the textarea that stands in for a text while it's typed
+src/textentry.js  the textarea standing in for a text while it is typed
 src/timeline.js the track: playhead, trim handles, doodle dots
 src/toolbar.js  which tool, colour and size the canvas is holding
 src/exporter.js making the file: WebCodecs, the recorder fallback, or a PNG
