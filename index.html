@@ -15,10 +15,8 @@
   <main>
     <input id="fileInput" type="file" accept="video/*,image/*" hidden />
 
-    <!-- The editor is always on screen. Until a file is loaded it sits in the
-         "empty" state: the drop zone fills the stage and the tools are dimmed.
-         A picture adds the "still" state: same drawing tools, no timeline and
-         no playback, because there is only one moment to be on. -->
+    <!-- "empty": no file yet, so the drop zone fills the stage and the tools
+         are dimmed. "still": a picture, so no timeline and no playback. -->
     <section id="editorScreen" class="editor empty">
       <div class="toolbar">
         <div class="tool-group tools" id="tools">
@@ -76,10 +74,7 @@
       <div class="stage" id="stage">
         <video id="video" playsinline></video>
         <canvas id="canvas"></canvas>
-        <!-- Typing happens in a real textarea sitting over the canvas, matched
-             to the text it will become: that's a caret, a mobile keyboard and
-             an IME for free. wrap="off" is the whole "no auto multiline" rule —
-             lines break where you press Enter and nowhere else. -->
+        <!-- wrap="off": lines break where you press Enter and nowhere else. -->
         <textarea id="textEditor" class="text-editor hidden" wrap="off"
                   spellcheck="false" autocomplete="off" autocapitalize="sentences"></textarea>
         <div id="exportOverlay" class="export-overlay hidden">
@@ -108,8 +103,6 @@
           </button>
           <div id="timeline" class="timeline">
             <div id="trimRegion" class="trim-region"></div>
-            <!-- One step wide: the moment the playhead is standing on, and the
-                 one a new doodle would belong to. -->
             <div id="stepSlot" class="step-slot"></div>
             <div id="keyframes" class="keyframes"></div>
             <div id="playhead" class="playhead"></div>
@@ -161,6 +154,6 @@
     </section>
   </main>
 
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="/src/app.js"></script>
 </body>
 </html>

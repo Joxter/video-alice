@@ -158,7 +158,20 @@ available or throws, the recording fallback takes over automatically.
 ```
 index.html      structure — one editor, which starts in an "empty" state
 style.css       styling
-app.js          all the logic: upload, trim, doodle layers, export
 vite.config.js  base path for GitHub Pages
 .github/workflows/deploy.yml   builds and publishes to Pages on push to main
+
+src/app.js      the wiring: opening files, buttons, keys, and the frame loop
+src/clip.js     the file being edited and where we are in it — video or picture
+src/doodles.js  the drawings, one per moment, and their storage
+src/render.js   items to pixels; knows nothing about the app
+src/stage.js    the preview canvas and everything a pointer does to it
+src/textentry.js  the textarea that stands in for a text while it's typed
+src/timeline.js the track: playhead, trim handles, doodle dots
+src/toolbar.js  which tool, colour and size the canvas is holding
+src/exporter.js making the file: WebCodecs, the recorder fallback, or a PNG
 ```
+
+Each piece is built by a `createX(...)` factory that takes what it needs and
+returns a small object; nothing reaches into anyone else's insides, and `app.js`
+is the only file that knows they all exist.
