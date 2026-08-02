@@ -6,9 +6,9 @@
 // Two ideas hold the rest together:
 //   - Time is a grid of TIME_STEPs. The playhead only stops on it and doodles
 //     belong to it, so "same moment?" is a comparison of whole numbers.
-//   - A doodle is its strokes. Layer canvases are caches, rebuilt by replaying
-//     them — which is how undo, the saved drawings and the full-resolution
-//     export all work without a pixel buffer per keyframe.
+//   - A doodle is its items — pen strokes and texts. Layer canvases are caches,
+//     rebuilt by replaying them, which is how undo, the saved drawings and the
+//     full-resolution export all work without a pixel buffer per keyframe.
 
 import {
   ALL_FORMATS,
@@ -60,6 +60,8 @@ const prevDrawBtn = $('prevDrawBtn');
 const nextDrawBtn = $('nextDrawBtn');
 const swatchesEl = $('swatches');
 const sizesEl = $('sizes');
+const toolsEl = $('tools');
+const textEditor = $('textEditor');
 const eraserBtn = $('eraserBtn');
 const undoBtn = $('undoBtn');
 const clearBtn = $('clearBtn');
@@ -92,12 +94,35 @@ const MIN_TRIM = 0.2;      // keep at least this much between trim handles
 // suffer for it, because it re-renders the strokes at the source's resolution.
 const PREVIEW_MAX = 1600;
 
+// ---------- Text ----------
+// The page's own stack, which resolves to the OS font on every platform this
+// runs on. Canvas and the on-screen editor share it, so what you type is what
+// gets drawn.
+const FONT_STACK =
+  'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+// The three size buttons are stroke widths; used raw as font sizes they'd be a
+// whisper. Same three buttons, three readable sizes.
+const TEXT_SCALE = 3;
+const LINE_HEIGHT = 1.25;
+// The drag handle is interface, not picture — it's never exported and never
+// baked into a layer — so it's sized in CSS pixels and stays the same handle
+// whatever resolution the canvas underneath happens to be.
+const ANCHOR_CSS = 11;
+const ANCHOR_GRAB_CSS = 22; // finger-sized, so the handle can stay small
+
 // Codec preference order, best-looking first. Filtered per output format.
 const VIDEO_CODECS = ['avc', 'vp9', 'av1', 'vp8'];
 const AUDIO_CODECS = ['aac', 'opus'];
 
 // ---------- State ----------
 const state = {
+  // A picture is a clip with one step on the grid: same canvas, same layers,
+  // same strokes, with the timeline and playback out of the way because there
+  // is only one moment to stand on. Everything that reads state.step, the
+  // layers or the toolbar works unchanged; only loading, the render loop and
+  // the export ask which of the two this is.
+  mode: 'video', // 'video' | 'image'
+  image: null,   // the decoded picture, in image mode — the export draws from it
   file: null,   // the original File — mediabunny decodes from this, not the <video>
   source: { width: 0, height: 0 }, // the video's own size; the export goes out at this
   step: 0,      // where the playhead is, in TIME_STEPs — see seek()
@@ -105,9 +130,14 @@ const state = {
   duration: 0,
   trimStart: 0,
   trimEnd: 0,
-  layers: [],   // { step, canvas, ctx, strokes:[{color,size,eraser,points:[{x,y}]}] }
-  tool: { color: COLORS[0], size: 14, eraser: false },
+  // { step, canvas, ctx, items: [ pen stroke | text ] }, where a pen stroke is
+  // { color, size, eraser, points:[{x,y}] } and a text is
+  // { type:'text', color, size, x, y, text } — x,y being its top-left corner.
+  layers: [],
+  tool: { kind: 'pen', color: COLORS[0], size: 14, eraser: false },
   drawing: null, // { pointerId, layer, stroke }
+  dragging: null, // { pointerId, layer, item, dx, dy, moved } — a text being moved
+  editing: null,  // { layer, item } — the text the textarea is standing in for
   exporting: false,
   audioTap: null, // WebAudio tap on the <video>, built once for recorder exports
 };
@@ -142,8 +172,14 @@ const stepAt = (t) => clamp(Math.round(t / TIME_STEP), 0, state.lastStep);
 const stepReached = (t) => clamp(Math.floor(t / TIME_STEP), 0, state.lastStep);
 
 function seek(step) {
-  state.step = clamp(Math.round(step), 0, state.lastStep);
-  video.currentTime = timeOf(state.step);
+  const next = clamp(Math.round(step), 0, state.lastStep);
+  // A text belongs to the moment it was typed at, so leaving that moment ends
+  // it. Only a real move counts: pausing snaps to the step we're already on,
+  // and it does that from an event that lands *after* the tap that paused —
+  // which is the same tap that may have just opened the editor.
+  if (next !== state.step) commitText();
+  state.step = next;
+  if (state.mode === 'video') video.currentTime = timeOf(state.step);
 }
 
 // The icon follows the element rather than every caller remembering to set it,
@@ -171,38 +207,119 @@ fileInput.addEventListener('change', () => {
 );
 dropZone.addEventListener('drop', (e) => {
   const file = e.dataTransfer.files[0];
-  if (file && file.type.startsWith('video/')) loadFile(file);
+  if (file && (file.type.startsWith('video/') || file.type.startsWith('image/'))) loadFile(file);
 });
 
-function loadFile(file) {
-  state.file = file;
-  if (video.src) URL.revokeObjectURL(video.src);
-  video.src = URL.createObjectURL(file);
-  video.load();
+// Paste works whenever the app is open, not just from the empty state: the
+// point of a picture here is annotating a screenshot, and a screenshot is
+// something you take and paste, not something you find on disk and drag.
+window.addEventListener('paste', (e) => {
+  if (state.exporting) return;
+  // Typing: the field gets its own paste, and it's words, not a file.
+  if (e.target.closest?.('input, textarea')) return;
+  const file = fileFromClipboard(e.clipboardData);
+  if (!file) return;
+  e.preventDefault();
+  loadFile(file);
+});
+
+// Browsers disagree about which of the two lists a pasted file shows up in, so
+// look in both and take the first thing this app can open.
+function fileFromClipboard(data) {
+  if (!data) return null;
+  const files = [...(data.files || [])];
+  for (const item of data.items || []) {
+    if (item.kind !== 'file') continue;
+    const file = item.getAsFile();
+    if (file) files.push(file);
+  }
+  return files.find((f) => f.type.startsWith('image/') || f.type.startsWith('video/')) || null;
 }
 
-video.addEventListener('loadedmetadata', setupVideo);
+function loadFile(file) {
+  commitText();
+  releaseSource();
+  state.file = file;
+  state.mode = file.type.startsWith('image/') ? 'image' : 'video';
+  if (state.mode === 'image') {
+    loadImage(file);
+  } else {
+    video.src = URL.createObjectURL(file);
+    video.load();
+  }
+}
+
+// One object URL is alive at a time, on whichever element is showing the file.
+function releaseSource() {
+  if (video.src) {
+    video.pause();
+    URL.revokeObjectURL(video.src);
+    video.removeAttribute('src');
+    video.load();
+  }
+  if (state.image) {
+    URL.revokeObjectURL(state.image.src);
+    state.image = null;
+  }
+}
+
+function loadImage(file) {
+  const img = new Image();
+  const stale = () => {
+    if (state.file === file) return false;
+    URL.revokeObjectURL(img.src); // something else arrived while this decoded
+    return true;
+  };
+  img.onload = () => {
+    if (stale()) return;
+    // An SVG with no intrinsic size loads fine and then has nothing to draw at:
+    // there's no resolution to export, and the stage has no shape to take.
+    if (!img.naturalWidth || !img.naturalHeight) return img.onerror();
+    state.image = img;
+    setupImage();
+  };
+  img.onerror = () => {
+    if (stale()) return;
+    URL.revokeObjectURL(img.src);
+    alert('Sorry, this picture can’t be opened.');
+    resetApp();
+  };
+  img.src = URL.createObjectURL(file);
+}
+
+// Both kinds of file land here: the stage takes the picture's shape, the canvas
+// and the frame buffer are sized for the preview, and the editor wakes up.
+function startEditing(width, height) {
+  state.layers = [];
+  state.source = { width, height };
+  const shrink = Math.min(1, PREVIEW_MAX / Math.max(1, width, height));
+  canvas.width = Math.max(1, Math.round(width * shrink));
+  canvas.height = Math.max(1, Math.round(height * shrink));
+  frame.width = canvas.width;   // also clears the previous file's last frame
+  frame.height = canvas.height;
+  stage.style.aspectRatio = `${width} / ${height}`;
+
+  editorScreen.classList.remove('empty');
+  editorScreen.classList.toggle('still', state.mode === 'image');
+  newBtn.classList.remove('hidden');
+  downloadBtn.textContent = state.mode === 'image' ? 'Download picture' : 'Download video';
+  setUIDisabled(false);
+  shownStep = -1;
+}
+
+video.addEventListener('loadedmetadata', () => {
+  if (state.mode !== 'video') return;
+  setupVideo();
+});
 
 function setupVideo() {
   state.trimStart = 0;
-  state.layers = [];
+  startEditing(video.videoWidth, video.videoHeight);
   // A file whose header has no duration reads as Infinity. Leave the timeline
   // empty rather than compute percentages of infinity, and go find the real
   // length in the background.
   setDuration(isFinite(video.duration) ? video.duration : 0);
   if (!isFinite(video.duration)) repairDuration(state.file);
-
-  state.source = { width: video.videoWidth, height: video.videoHeight };
-  const shrink = Math.min(1, PREVIEW_MAX / Math.max(1, video.videoWidth, video.videoHeight));
-  canvas.width = Math.max(1, Math.round(video.videoWidth * shrink));
-  canvas.height = Math.max(1, Math.round(video.videoHeight * shrink));
-  frame.width = canvas.width;   // also clears the previous video's last frame
-  frame.height = canvas.height;
-  stage.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
-
-  editorScreen.classList.remove('empty');
-  newBtn.classList.remove('hidden');
-  setUIDisabled(false);
 
   // The canvas has its size now and the grid its length, so the saved strokes
   // have somewhere to land. When the duration needed repairing there's no grid
@@ -210,7 +327,19 @@ function setupVideo() {
   if (state.duration) restoreDrawings();
 
   seek(0);
-  shownStep = -1;
+  renderKeyframes();
+}
+
+// A still is one step long, so the grid has a single moment on it: step 0. That
+// falls out of setDuration(0) — lastStep is 0 — and everything downstream
+// (which layer is showing, which one a stroke joins) needs no special case.
+function setupImage() {
+  state.trimStart = 0;
+  startEditing(state.image.naturalWidth, state.image.naturalHeight);
+  setDuration(0);
+  frameCtx.drawImage(state.image, 0, 0, canvas.width, canvas.height);
+  restoreDrawings();
+  state.step = 0;
   renderKeyframes();
 }
 
@@ -246,23 +375,24 @@ async function repairDuration(file) {
 
 newBtn.addEventListener('click', resetApp);
 function resetApp() {
-  video.pause();
-  if (video.src) URL.revokeObjectURL(video.src);
-  video.removeAttribute('src');
-  video.load();
+  commitText();
+  releaseSource();
   state.layers = [];
   state.file = null;
+  state.mode = 'video';
   state.source = { width: 0, height: 0 };
   state.step = 0;
   state.trimStart = 0;
   setDuration(0);
   fileInput.value = '';
   // The inline ratio outranks the empty-state rule, so the drop zone would
-  // otherwise keep the shape of the video that just left.
+  // otherwise keep the shape of the file that just left.
   stage.style.aspectRatio = '';
   renderKeyframes();
   editorScreen.classList.add('empty');
+  editorScreen.classList.remove('still');
   newBtn.classList.add('hidden');
+  downloadBtn.textContent = 'Download video';
   setUIDisabled(true);
 }
 
@@ -282,7 +412,7 @@ function blankLayer(step) {
   const c = document.createElement('canvas');
   c.width = canvas.width;
   c.height = canvas.height;
-  return { step, canvas: c, ctx: c.getContext('2d'), strokes: [] };
+  return { step, canvas: c, ctx: c.getContext('2d'), items: [] };
 }
 
 function createLayer(step) {
@@ -308,9 +438,16 @@ function activeLayerAt(step) {
   return best;
 }
 
-// The layer a new stroke joins: the one on this exact step, or a new one.
+// The layer a new stroke or text joins: the one on this exact step, or a new one.
 function layerForDrawing() {
   return state.layers.find((l) => l.step === state.step) || createLayer(state.step);
+}
+
+// The layer whose own moment is the one we're standing on — the only one a text
+// can be moved or retyped in. A doodle inherited from an earlier step is on
+// screen but not in hand: go back to its dot to change it, same as the pen.
+function editableLayer() {
+  return state.layers.find((l) => l.step === state.step) || null;
 }
 
 // ---------- Stroke drawing ----------
@@ -346,23 +483,57 @@ function drawSegment(context, stroke, a, b) {
   context.globalCompositeOperation = 'source-over';
 }
 
-function replayStroke(context, stroke) {
-  if (stroke.points.length === 1) {
-    drawDot(context, stroke, stroke.points[0]);
-    return;
-  }
-  for (let i = 1; i < stroke.points.length; i++) {
-    drawSegment(context, stroke, stroke.points[i - 1], stroke.points[i]);
+// Measuring only — a context that is never drawn to and never sized.
+const measureCtx = document.createElement('canvas').getContext('2d');
+
+// The box a text occupies, in the coordinates it's stored in. The anchor hangs
+// off its top-right corner, and the on-screen editor is sized from it.
+function textBox(item) {
+  const lines = item.text.split('\n');
+  measureCtx.font = `${item.size}px ${FONT_STACK}`;
+  let width = 0;
+  for (const line of lines) width = Math.max(width, measureCtx.measureText(line).width);
+  return { lines, width, height: lines.length * item.size * LINE_HEIGHT };
+}
+
+function drawText(context, item) {
+  if (!item.text) return;
+  context.globalCompositeOperation = 'source-over';
+  context.fillStyle = item.color;
+  context.font = `${item.size}px ${FONT_STACK}`;
+  context.textBaseline = 'top';
+  const { lines } = textBox(item);
+  lines.forEach((line, i) => {
+    context.fillText(line, item.x, item.y + i * item.size * LINE_HEIGHT);
+  });
+}
+
+// One doodle is a list of these, replayed in order — so a text typed over a
+// stroke stays over it, and the eraser rubs out whatever came before it.
+function replayItem(context, item) {
+  if (item.type === 'text') {
+    drawText(context, item);
+  } else if (item.points.length === 1) {
+    drawDot(context, item, item.points[0]);
+  } else {
+    for (let i = 1; i < item.points.length; i++) {
+      drawSegment(context, item, item.points[i - 1], item.points[i]);
+    }
   }
 }
 
 function redrawLayer(layer) {
   layer.ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
-  for (const s of layer.strokes) replayStroke(layer.ctx, s);
+  for (const item of layer.items) {
+    // The text being typed lives in the textarea instead, or it would show up
+    // twice — once flat, once under the caret.
+    if (item === state.editing?.item) continue;
+    replayItem(layer.ctx, item);
+  }
 }
 
 // ---------- Keeping the drawings between visits ----------
-// Only the strokes are stored: they *are* the drawing, and they're small. The
+// Only the items are stored: they *are* the drawing, and they're small. The
 // layer canvases get rebuilt from them, the same way undo already does it.
 //
 // Steps are absolute, so they survive a change of video on their own, but
@@ -381,12 +552,21 @@ function saveDrawings() {
       height: canvas.height,
       layers: state.layers.map((l) => ({
         step: l.step,
-        strokes: l.strokes.map((s) => ({
-          color: s.color,
-          size: s.size,
-          eraser: s.eraser,
-          points: s.points.map((p) => [tenth(p.x), tenth(p.y)]),
-        })),
+        items: l.items.map((item) => (item.type === 'text'
+          ? {
+            type: 'text',
+            color: item.color,
+            size: item.size,
+            x: tenth(item.x),
+            y: tenth(item.y),
+            text: item.text,
+          }
+          : {
+            color: item.color,
+            size: item.size,
+            eraser: item.eraser,
+            points: item.points.map((p) => [tenth(p.x), tenth(p.y)]),
+          })),
       })),
     }));
   } catch (err) {
@@ -424,12 +604,23 @@ function restoreDrawings() {
   for (const l of saved.layers) {
     if (l.step > state.lastStep) continue; // past the end of *this* video
     const layer = blankLayer(l.step);
-    layer.strokes = l.strokes.map((s) => ({
-      color: s.color,
-      eraser: s.eraser,
-      size: s.size * sx, // the brush was that thick relative to the picture
-      points: s.points.map(([x, y]) => ({ x: x * sx, y: y * sy })),
-    }));
+    // `strokes` is what the version before the text tool wrote — drawings saved
+    // by it are pen strokes, and still load.
+    layer.items = (l.items || l.strokes || []).map((item) => (item.type === 'text'
+      ? {
+        type: 'text',
+        color: item.color,
+        size: item.size * sx, // the letters were that big relative to the picture
+        x: item.x * sx,
+        y: item.y * sy,
+        text: item.text,
+      }
+      : {
+        color: item.color,
+        eraser: item.eraser,
+        size: item.size * sx, // the brush was that thick relative to the picture
+        points: item.points.map(([x, y]) => ({ x: x * sx, y: y * sy })),
+      }));
     redrawLayer(layer);
     state.layers.push(layer);
   }
@@ -438,8 +629,9 @@ function restoreDrawings() {
 }
 
 // Layers are rasterised at preview size, but the export goes out at the video's
-// own resolution. Strokes are geometry, so replaying them into a bigger canvas
-// costs nothing in quality — upscaling layer.canvas would have cost edges.
+// own resolution. Strokes and text are both geometry, so replaying them into a
+// bigger canvas costs nothing in quality — upscaling layer.canvas would have
+// cost edges, and letters most of all.
 //
 // Returns a function that hands back that canvas for a given layer. Frames are
 // encoded in timestamp order, so only one layer is ever live: keep a single
@@ -461,7 +653,7 @@ function layerRasterizer(width, height) {
       // Scaling the pen along with the points keeps every line the same
       // thickness relative to the picture as it was on screen.
       context.setTransform(width / layer.canvas.width, 0, 0, height / layer.canvas.height, 0, 0);
-      for (const s of layer.strokes) replayStroke(context, s);
+      for (const item of layer.items) replayItem(context, item);
     }
     return out;
   };
@@ -486,25 +678,73 @@ canvas.addEventListener('pointerdown', (e) => {
   if (state.exporting) return;
   // One stroke at a time. A second finger landing mustn't start a rival stroke
   // or take the first one over.
-  if (state.drawing) return;
+  if (state.drawing || state.dragging) return;
+  // Putting the pointer down anywhere is the end of typing. Do it first, so
+  // what happens next sees the text as finished — including this same click
+  // landing on the anchor of the text it just committed.
+  commitText();
 
   video.pause();
-  canvas.setPointerCapture(e.pointerId);
-
-  const layer = layerForDrawing();
   const pt = toCanvasPoint(e);
+
+  if (state.tool.kind === 'text') {
+    // The textarea has to be focused from inside the gesture, or a phone won't
+    // raise its keyboard — and the browser's own click handling would take that
+    // focus straight back and blur it, committing the text before a single
+    // letter reached it. So this gesture gets no default behaviour at all.
+    e.preventDefault();
+    const hit = anchorAt(pt);
+    if (hit) {
+      // Held and moved, it's a drag; let go without moving and it's a request
+      // to retype — decided in endPointer, once we know which it was.
+      canvas.setPointerCapture(e.pointerId);
+      state.dragging = {
+        pointerId: e.pointerId,
+        layer: hit.layer,
+        item: hit.item,
+        dx: hit.item.x - pt.x,
+        dy: hit.item.y - pt.y,
+        moved: false,
+      };
+    } else {
+      const layer = layerForDrawing();
+      const item = {
+        type: 'text',
+        color: state.tool.color,
+        size: state.tool.size * TEXT_SCALE,
+        x: pt.x,
+        y: pt.y,
+        text: '',
+      };
+      layer.items.push(item);
+      openTextEditor(layer, item);
+    }
+    return;
+  }
+
+  canvas.setPointerCapture(e.pointerId);
+  const layer = layerForDrawing();
   const stroke = {
     color: state.tool.color,
     size: state.tool.size,
     eraser: state.tool.eraser,
     points: [pt],
   };
-  layer.strokes.push(stroke);
+  layer.items.push(stroke);
   state.drawing = { pointerId: e.pointerId, layer, stroke };
   drawDot(layer.ctx, stroke, pt);
 });
 
 canvas.addEventListener('pointermove', (e) => {
+  if (state.dragging?.pointerId === e.pointerId) {
+    const { layer, item, dx, dy } = state.dragging;
+    const pt = toCanvasPoint(e);
+    item.x = pt.x + dx;
+    item.y = pt.y + dy;
+    state.dragging.moved = true;
+    redrawLayer(layer);
+    return;
+  }
   if (state.drawing?.pointerId !== e.pointerId) return;
   const { layer, stroke } = state.drawing;
   const pt = toCanvasPoint(e);
@@ -514,6 +754,13 @@ canvas.addEventListener('pointermove', (e) => {
 });
 
 function endPointer(e) {
+  if (state.dragging?.pointerId === e.pointerId) {
+    const { layer, item, moved } = state.dragging;
+    state.dragging = null;
+    if (moved) saveSoon();
+    else openTextEditor(layer, item); // a tap on the anchor, not a drag
+    return;
+  }
   if (state.drawing?.pointerId !== e.pointerId) return;
   state.drawing = null;
   saveSoon(); // a stroke just finished
@@ -521,17 +768,133 @@ function endPointer(e) {
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
 
+// ---------- Text ----------
+// How many canvas pixels one CSS pixel is worth. The anchor and the on-screen
+// editor are the two things measured in what the eye sees rather than in what
+// the picture is.
+const cssScale = () => canvas.width / (canvas.getBoundingClientRect().width || 1);
+
+// The handle: the top-right corner of the text's box.
+function anchorOf(item) {
+  return { x: item.x + textBox(item).width, y: item.y };
+}
+
+// Only the layer we're standing on, and only while the text tool is out — the
+// pen shouldn't have to dodge handles.
+function textsInHand() {
+  if (state.tool.kind !== 'text') return [];
+  const layer = editableLayer();
+  if (!layer) return [];
+  return layer.items
+    .filter((item) => item.type === 'text' && item !== state.editing?.item)
+    .map((item) => ({ layer, item }));
+}
+
+// Topmost first: the last text drawn is the one on top, so it's the one a tap
+// on two overlapping handles should get.
+function anchorAt(pt) {
+  const grab = ANCHOR_GRAB_CSS * cssScale();
+  const hits = textsInHand().reverse();
+  for (const hit of hits) {
+    const a = anchorOf(hit.item);
+    if (Math.hypot(pt.x - a.x, pt.y - a.y) <= grab) return hit;
+  }
+  return null;
+}
+
+// Drawn on the preview canvas after everything else, so it's never part of a
+// layer and never lands in the export.
+function drawAnchors() {
+  const hits = textsInHand();
+  if (!hits.length) return; // the common case: the pen is out, or there's no text
+  const r = ANCHOR_CSS * cssScale();
+  for (const { item } of hits) {
+    const a = anchorOf(item);
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, r * 0.22);
+    ctx.strokeStyle = '#2f6df6';
+    ctx.stroke();
+  }
+}
+
+// The textarea stands in for the text while it's being typed: same font, same
+// size, same colour, in the same place. redrawLayer leaves the item out for as
+// long as this is up, so there's exactly one of it on screen.
+function openTextEditor(layer, item) {
+  state.editing = { layer, item };
+  redrawLayer(layer);
+  textEditor.value = item.text;
+  textEditor.classList.remove('hidden');
+  syncTextEditor();
+  textEditor.focus();
+  textEditor.setSelectionRange(item.text.length, item.text.length);
+}
+
+function syncTextEditor() {
+  if (!state.editing) return;
+  const { item } = state.editing;
+  const scale = 1 / cssScale(); // canvas pixels → CSS pixels
+  const size = item.size * scale;
+  // Canvas puts the first line's top at item.y; a line box in the textarea has
+  // the glyph centred in it, so it starts half a line's leading higher.
+  const lead = ((LINE_HEIGHT - 1) / 2) * size;
+  const box = textBox({ ...item, text: textEditor.value });
+  textEditor.style.left = `${item.x * scale}px`;
+  textEditor.style.top = `${item.y * scale - lead}px`;
+  textEditor.style.font = `${size}px ${FONT_STACK}`;
+  textEditor.style.lineHeight = `${LINE_HEIGHT}`;
+  textEditor.style.color = item.color;
+  // Room for the caret past the last letter, or it sits on the boundary and
+  // scrolls the field sideways.
+  textEditor.style.width = `${box.width * scale + size * 0.6}px`;
+  textEditor.style.height = `${box.height * scale}px`;
+}
+textEditor.addEventListener('input', syncTextEditor);
+textEditor.addEventListener('blur', commitText);
+textEditor.addEventListener('keydown', (e) => {
+  // Enter is a new line — that's the whole point of a textarea here. Escape is
+  // "done", the same as clicking away; there's nothing to cancel, since an
+  // empty text simply doesn't become anything.
+  if (e.key === 'Escape') { e.preventDefault(); commitText(); }
+});
+window.addEventListener('resize', syncTextEditor);
+
+// Typing is over: the item takes the text, and goes back to being drawn into
+// its layer like everything else. Called from anywhere that changes what's on
+// screen, and does nothing if nothing is being typed.
+function commitText() {
+  if (!state.editing) return;
+  const { layer, item } = state.editing;
+  item.text = textEditor.value;
+  state.editing = null;
+  textEditor.classList.add('hidden');
+  textEditor.blur();
+
+  if (!item.text.trim()) {
+    const i = layer.items.indexOf(item);
+    if (i >= 0) layer.items.splice(i, 1);
+  }
+  if (!layer.items.length) removeLayer(layer);
+  else redrawLayer(layer);
+  saveSoon();
+}
+
 // ---------- Undo / Clear ----------
 undoBtn.addEventListener('click', () => {
+  commitText();
   const layer = activeLayerAt(state.step);
-  if (!layer || !layer.strokes.length) return;
-  layer.strokes.pop();
+  if (!layer || !layer.items.length) return;
+  layer.items.pop();
   redrawLayer(layer);
-  if (!layer.strokes.length) removeLayer(layer);
+  if (!layer.items.length) removeLayer(layer);
   saveSoon();
 });
 
 clearBtn.addEventListener('click', () => {
+  commitText();
   const layer = activeLayerAt(state.step);
   if (!layer) return;
   removeLayer(layer);
@@ -539,6 +902,25 @@ clearBtn.addEventListener('click', () => {
 });
 
 // ---------- Toolbar ----------
+// Pen or text. The eraser belongs to the pen — it rubs out pixels in the layer,
+// which is a brush thing — so choosing text puts it away, and choosing it
+// brings the pen back.
+toolsEl.querySelectorAll('[data-tool]').forEach((b) => {
+  b.addEventListener('click', () => setTool(b.dataset.tool));
+});
+
+function setTool(kind) {
+  commitText();
+  state.tool.kind = kind;
+  if (kind !== 'pen') {
+    state.tool.eraser = false;
+    eraserBtn.classList.remove('active');
+  }
+  toolsEl.querySelectorAll('[data-tool]')
+    .forEach((b) => b.classList.toggle('active', b.dataset.tool === kind));
+  editorScreen.classList.toggle('typing', kind === 'text');
+}
+
 COLORS.forEach((color, i) => {
   const b = document.createElement('button');
   b.className = 'swatch' + (i === 0 ? ' active' : '');
@@ -561,8 +943,10 @@ sizesEl.querySelectorAll('.size-btn').forEach((b) => {
 });
 
 eraserBtn.addEventListener('click', () => {
-  state.tool.eraser = !state.tool.eraser;
-  eraserBtn.classList.toggle('active', state.tool.eraser);
+  const on = !state.tool.eraser;
+  setTool('pen'); // it rubs out pixels, which is something only the brush does
+  state.tool.eraser = on;
+  eraserBtn.classList.toggle('active', on);
 });
 
 // ---------- Playback ----------
@@ -643,23 +1027,25 @@ function renderLoop() {
 
   // While playing, the element is the one moving, so follow it. Every other way
   // of getting somewhere goes through seek().
-  if (!video.paused) state.step = stepReached(video.currentTime);
+  if (state.mode === 'video' && !video.paused) state.step = stepReached(video.currentTime);
 
   // The <video> refuses to draw while a seek is still fetching its frame. Keep
   // the last frame that did arrive in a buffer of its own and composite from
   // that, so a stroke drawn mid-seek still shows up instead of the stage sitting
-  // on a stale picture until playback repaints it.
-  if (video.readyState >= 2) {
+  // on a stale picture until playback repaints it. A still is painted into that
+  // same buffer once, when it loads, and never changes.
+  if (state.mode === 'video' && video.readyState >= 2) {
     frameCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
   }
   ctx.clearRect(0, 0, canvas.width, canvas.height); // the buffer is empty until the first frame
   ctx.drawImage(frame, 0, 0);
   const layer = activeLayerAt(state.step);
   if (layer) ctx.drawImage(layer.canvas, 0, 0);
+  drawAnchors(); // handles, not picture — after the layer, and never in it
 
   // Stop preview playback at the trim end. Straight off the element: the trim
   // handles aren't on the grid, so this is a question about real time.
-  if (!video.paused && video.currentTime >= state.trimEnd - 1e-3) {
+  if (state.mode === 'video' && !video.paused && video.currentTime >= state.trimEnd - 1e-3) {
     video.pause(); // the pause handler puts us back on the grid
   }
 
@@ -777,13 +1163,19 @@ timeline.addEventListener('pointercancel', () => { dragTarget = null; });
 // ---------- Keyboard niceties ----------
 window.addEventListener('keydown', (e) => {
   if (editorScreen.classList.contains('empty') || state.exporting) return;
+  // While typing, every key is a key. Space is a space, the arrows move the
+  // caret, and undo is the field's own.
+  if (e.target.closest?.('input, textarea')) return;
+  // Undo is the only one a still has any use for — there's nowhere to play to
+  // and nowhere to step.
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoBtn.click(); }
+  if (state.mode !== 'video') return;
   // Space on a focused button is that button's own shortcut — leave it alone,
   // or clicking Play once and then pressing Space toggles playback twice.
   if (e.code === 'Space' && !e.target.closest?.('button')) { e.preventDefault(); togglePlay(); }
   // Shift narrows the jump to a single step, matching the single chevrons.
   if (e.code === 'ArrowLeft') { e.preventDefault(); skip(e.shiftKey ? -1 : -STEP_JUMP); }
   if (e.code === 'ArrowRight') { e.preventDefault(); skip(e.shiftKey ? 1 : STEP_JUMP); }
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoBtn.click(); }
 });
 
 // ---------- Export ----------
@@ -825,10 +1217,41 @@ async function pickEncoding(width, height, audioTrack) {
   return null;
 }
 
-downloadBtn.addEventListener('click', exportVideo);
+downloadBtn.addEventListener('click', () => {
+  if (state.mode === 'image') exportImage();
+  else exportVideo();
+});
+
+// A still needs none of the machinery below: no decoder, no encoder, no
+// progress. Draw the picture at its own resolution, replay the doodle's strokes
+// on top at that size — the same rasterizer the video export uses — and hand
+// over a PNG.
+async function exportImage() {
+  if (state.exporting || !state.image) return;
+  commitText(); // whatever is half-typed goes in the file
+  try {
+    const { width, height } = state.source;
+    const out = document.createElement('canvas');
+    out.width = width;
+    out.height = height;
+    const outCtx = out.getContext('2d');
+    outCtx.drawImage(state.image, 0, 0, width, height);
+    const doodle = layerRasterizer(width, height)(activeLayerAt(state.step));
+    if (doodle) outCtx.drawImage(doodle, 0, 0);
+
+    const blob = await new Promise((resolve, reject) => {
+      out.toBlob((b) => (b ? resolve(b) : reject(new Error('The picture couldn’t be encoded.'))), 'image/png');
+    });
+    downloadBlob(blob, exportFileName('png'));
+  } catch (err) {
+    console.error('Export failed:', err);
+    alert('Sorry, making the picture didn’t work.\n\n' + describeError(err));
+  }
+}
 
 async function exportVideo() {
   if (state.exporting || !state.file) return;
+  commitText(); // whatever is half-typed goes in the file
 
   state.exporting = true;
   setUIDisabled(true);
@@ -1095,12 +1518,13 @@ function seekAndWait(t) {
   });
 }
 
-// e.g. alice-video_2026-08-01_7s.mp4 — the duration is the trimmed length, so
-// the name describes the file you actually got.
+// e.g. alice-video_2026-08-01_7s.mp4, or alice-image_2026-08-01.png — the
+// duration is the trimmed length, so the name describes the file you got.
 function exportFileName(ext) {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
   const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  if (state.mode === 'image') return `alice-image_${date}.${ext}`;
   const seconds = Math.max(1, Math.round(state.trimEnd - state.trimStart));
   return `alice-video_${date}_${seconds}s.${ext}`;
 }

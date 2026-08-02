@@ -9,16 +9,33 @@
 <body>
   <header class="topbar">
     <h1>Video Alice</h1>
-    <button id="newBtn" class="btn ghost hidden">New video</button>
+    <button id="newBtn" class="btn ghost hidden">New file</button>
   </header>
 
   <main>
-    <input id="fileInput" type="file" accept="video/*" hidden />
+    <input id="fileInput" type="file" accept="video/*,image/*" hidden />
 
-    <!-- The editor is always on screen. Until a video is loaded it sits in the
-         "empty" state: the drop zone fills the stage and the tools are dimmed. -->
+    <!-- The editor is always on screen. Until a file is loaded it sits in the
+         "empty" state: the drop zone fills the stage and the tools are dimmed.
+         A picture adds the "still" state: same drawing tools, no timeline and
+         no playback, because there is only one moment to be on. -->
     <section id="editorScreen" class="editor empty">
       <div class="toolbar">
+        <div class="tool-group tools" id="tools">
+          <button class="btn tool icon active" data-tool="pen" title="Pen" aria-label="Pen">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 20.5l1-4L16.4 5.1a2.2 2.2 0 0 1 3 3L8 19.5z" />
+              <path d="M14.5 7 17 9.5" />
+            </svg>
+          </button>
+          <button class="btn tool icon" data-tool="text" title="Text" aria-label="Text">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 7V5h14v2" />
+              <path d="M12 5v14" />
+              <path d="M9 19h6" />
+            </svg>
+          </button>
+        </div>
         <div class="tool-group swatches" id="swatches"></div>
         <div class="tool-group sizes" id="sizes">
           <button class="size-btn" data-size="6" title="Thin" aria-label="Thin brush">
@@ -59,6 +76,12 @@
       <div class="stage" id="stage">
         <video id="video" playsinline></video>
         <canvas id="canvas"></canvas>
+        <!-- Typing happens in a real textarea sitting over the canvas, matched
+             to the text it will become: that's a caret, a mobile keyboard and
+             an IME for free. wrap="off" is the whole "no auto multiline" rule —
+             lines break where you press Enter and nowhere else. -->
+        <textarea id="textEditor" class="text-editor hidden" wrap="off"
+                  spellcheck="false" autocomplete="off" autocapitalize="sentences"></textarea>
         <div id="exportOverlay" class="export-overlay hidden">
           <div class="export-box">
             <p id="exportLabel">Making your video…</p>
@@ -67,10 +90,11 @@
         </div>
 
         <div id="dropZone" class="dropzone">
-          <p class="drop-title">Drop a short video here</p>
+          <p class="drop-title">Drop a short video or a picture here</p>
           <p class="drop-hint">or</p>
-          <button id="pickBtn" class="btn primary">Choose a video</button>
-          <p class="drop-note">Best with clips around 10 seconds. Nothing leaves your device.</p>
+          <button id="pickBtn" class="btn primary">Choose a file</button>
+          <p class="drop-note">or paste one from the clipboard.<br />
+            Best with clips around 10 seconds. Nothing leaves your device.</p>
         </div>
       </div>
 

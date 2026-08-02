@@ -170,6 +170,13 @@ main {
     max-height: 340px;
 }
 
+/* A picture is one moment, so there's nothing to trim, scrub or play. The
+   drawing tools and the download button stay exactly as they are. */
+.editor.still .timeline-wrap,
+.editor.still .controls {
+    display: none;
+}
+
 .stage {
     position: relative;
     /* Sized from the page width only, at the video's aspect ratio (set inline
@@ -202,6 +209,26 @@ main {
     z-index: 2;
     touch-action: none;
     cursor: crosshair;
+}
+.editor.typing .stage canvas {
+    cursor: text;
+}
+/* The text being typed, standing exactly where it will be drawn: same font,
+   same size, same colour, no box of its own. Only the ring and the caret say
+   it isn't part of the picture yet. */
+.text-editor {
+    position: absolute;
+    z-index: 3;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    white-space: pre;
+    background: transparent;
+    box-shadow: 0 0 0 1px var(--accent);
+    caret-color: var(--accent);
 }
 .export-overlay {
     position: absolute;
@@ -443,6 +470,12 @@ main {
 .swatch.active {
     box-shadow: 0 0 0 2px var(--accent);
 }
+/* Which tool the canvas is holding — pen or text — reads first, so it comes
+   before the colours and sizes that dress it. */
+.tools {
+    border-right: 1px solid var(--border);
+    padding-right: 16px;
+}
 .sizes {
     border-left: 1px solid var(--border);
     padding-left: 16px;
@@ -511,6 +544,10 @@ main {
     .sizes {
         border-left: none;
         padding-left: 0;
+    }
+    .tools {
+        border-right: none;
+        padding-right: 0;
     }
     .actions {
         justify-content: stretch;

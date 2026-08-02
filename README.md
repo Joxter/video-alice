@@ -1,7 +1,8 @@
 # Video Alice
 
 A tiny video editor for short clips, simple enough for kids. Upload a video, trim
-the ends, doodle on top, download the result.
+the ends, doodle on top, download the result. Pictures work too: drop one in and
+the same brushes mark it up.
 
 **[Try it →](https://joxter.github.io/video-alice/)**
 
@@ -11,15 +12,17 @@ drawings, in this browser's own local storage.
 
 ## What it does
 
-- **Upload** — drag and drop a clip, or pick one. Works best with ~10 second videos.
+- **Upload** — drag and drop a clip or a picture, pick one, or paste one. Paste works at
+  any time, not just from the empty screen: copy a screenshot, press <kbd>⌘V</kbd>, and
+  it's on the stage ready to mark up. Works best with ~10 second videos.
   The tools are all on screen before you choose a file, dimmed until there's something
   to edit.
 - **Trim** — two handles on the timeline set the start and end. Playback stays inside
   them, but scrubbing and stepping range over the whole clip, so you can look at what
   you cut or draw just outside it.
 - **Draw** — pause anywhere and doodle. Each doodle is pinned to that moment (an orange
-  dot on the timeline) and stays on screen until the next doodle takes over. Ten colors,
-  three brush sizes, eraser, undo, clear.
+  dot on the timeline) and stays on screen until the next doodle takes over. Two tools —
+  pen and text — ten colors, three sizes, eraser, undo, clear.
 
   A doodle *replaces* the one before it, it doesn't add to it. Exactly one drawing is on
   screen at a time — the most recent one at or before the playhead — so starting a new
@@ -27,10 +30,23 @@ drawings, in this browser's own local storage.
   drawing you are on, not the one it inherited. To change an existing doodle, jump back
   to its own dot with the orange-dot buttons; drawing a step later starts a new one.
 
-  Drawings survive a reload: the strokes are kept in this browser's local storage,
-  under a `videoAlice:` prefix. There's no check that you came back with the same
-  video — load a different clip and the doodles are still there, at the same moments,
-  rescaled if the picture is a different shape.
+  Drawings survive a reload: the strokes and texts are kept in this browser's local
+  storage, under a `videoAlice:` prefix. There's no check that you came back with the
+  same video — load a different clip and the doodles are still there, at the same
+  moments, rescaled if the picture is a different shape.
+- **Type** — switch to the text tool and click where the words should start. It's the
+  system font, in whichever of the ten colors and three sizes the toolbar is set to.
+  Lines break where you press Enter and nowhere else — nothing wraps on its own, so a
+  caption keeps the shape you gave it.
+
+  Every text carries a blue handle at its top-right corner. Drag the handle to move the
+  text; tap it to type in it again. Handles only show while the text tool is out, and
+  only for the doodle at the moment you're standing on — the same rule the pen follows.
+  Click away, or press <kbd>Esc</kbd>, and the text is done; leave it empty and it never
+  becomes anything.
+
+  Color and size are picked before you type. Changing them doesn't restyle a text that
+  already exists — undo it and type it again.
 - **Play** — play/pause and stop (back to the start of the trim). Double chevrons
   jump a second, single chevrons one step. The outer buttons, marked with an orange
   dot, hop straight between the moments that already have a drawing.
@@ -38,7 +54,20 @@ drawings, in this browser's own local storage.
   and the clip's length: `alice-video_2026-08-01_7s.mp4`.
 
 Shortcuts: <kbd>Space</kbd> to play/pause, <kbd>←</kbd> / <kbd>→</kbd> to skip a second
-(hold <kbd>Shift</kbd> for one step), <kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd> to undo.
+(hold <kbd>Shift</kbd> for one step), <kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd> to undo, and
+<kbd>⌘V</kbd> to bring in a new file. While you're typing, every key is just a key.
+
+## Pictures
+
+Drop in — or paste — a PNG or a JPEG instead of a video and the editor turns into a
+still one: the timeline and the playback buttons go away, since there's only one moment
+to stand on, and the toolbar, the tools, undo and clear are exactly as they were.
+Download gives you a PNG at the picture's own resolution, `alice-image_2026-08-01.png`.
+
+Nothing about the drawing side needed changing for this. A doodle belongs to a step on
+the grid, and a picture is a clip with a single step on it — so the code that decides
+which doodle is on screen, which one a stroke or a text joins, and how both are
+re-rendered at full resolution for the export is the same code either way.
 
 ### The step grid
 
@@ -84,6 +113,10 @@ npm run preview   # serve that build
 The interesting part of an editor like this is producing a downloadable file with
 the trim and drawings baked in, entirely in the browser.
 
+A doodle is a list of items — pen strokes and texts — in the order they were made.
+The layer canvas is only a cache of replaying them, which is what makes undo, the
+saved drawings and the full-resolution export the same mechanism three times over.
+
 The preview composites two things onto a canvas: the current video frame, and the
 doodle layer belonging to that moment. The export runs that same compositing again —
 but instead of the `<video>` element, frames come from
@@ -92,7 +125,8 @@ but instead of the `<video>` element, frames come from
 1. `VideoSampleSink.samples(trimStart, trimEnd)` yields exactly the frames inside the trim.
 2. Each frame is drawn to an offscreen canvas at the video's own resolution, and the
    doodle for that frame's timestamp is drawn on top. The doodle is re-rendered from
-   its strokes at that resolution rather than scaled up from the preview: on screen
+   its items at that resolution rather than scaled up from the preview — strokes and
+   letters alike come out sharp, not enlarged: on screen
    the drawing layers are capped at 1600px, since that's more than the page can show
    and a full-size layer per doodle is what makes a 4K clip expensive to keep in
    memory.
